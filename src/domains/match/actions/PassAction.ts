@@ -89,16 +89,16 @@ export const PassAction: BallAction = {
 		if (best.positionBonus > 0)
 			reasons.push(`advanced position (${best.t.position})`);
 
-		console.debug(
-			`[Pass] ${ctx.player.name} passes to ${best.t.name} (score=${best.score.toFixed(2)}, blockers=${best.blockers}) — ${reasons.join(", ") || "best overall score"}. ` +
-				`Others considered: ${ranked
-					.slice(1)
-					.map(
-						(s) =>
-							`${s.t.name} (${s.t.position}, score=${s.score.toFixed(2)}, blockers=${s.blockers})`,
-					)
-					.join(", ")}.`,
-		);
+		// console.debug(
+		// 	`[Pass] ${ctx.player.name} passes to ${best.t.name} (score=${best.score.toFixed(2)}, blockers=${best.blockers}) — ${reasons.join(", ") || "best overall score"}. ` +
+		// 		`Others considered: ${ranked
+		// 			.slice(1)
+		// 			.map(
+		// 				(s) =>
+		// 					`${s.t.name} (${s.t.position}, score=${s.score.toFixed(2)}, blockers=${s.blockers})`,
+		// 			)
+		// 			.join(", ")}.`,
+		// );
 
 		const dx = best.t.x - ctx.player.x;
 		const dy = best.t.y - ctx.player.y;

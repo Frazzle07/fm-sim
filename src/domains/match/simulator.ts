@@ -1,3 +1,4 @@
+import { DribbleAction } from "./actions/DribbleAction";
 import { HoldAction } from "./actions/HoldAction";
 import { PassAction } from "./actions/PassAction";
 import { PressAction } from "./actions/PressAction";
@@ -25,7 +26,7 @@ const JITTER_RADIUS = 0.0008;
 
 // Evaluated in order; first action whose canExecute returns true wins.
 const MOVEMENT_ACTIONS: Action[] = [PressAction, HoldAction];
-const BALL_ACTIONS: BallAction[] = [PassAction];
+const BALL_ACTIONS: BallAction[] = [DribbleAction, PassAction];
 
 interface LivePlayer extends MatchPlayer {
 	targetX: number;
@@ -114,6 +115,7 @@ export class MatchSimulator {
 		}
 
 		// Stage 3: Compute ball command (ball-carrier decides what to do).
+		let dribblerId: string | null = null;
 		if (this.ballHolderId !== null) {
 			const holder = this.players.find((p) => p.id === this.ballHolderId);
 			if (holder) {
@@ -133,6 +135,10 @@ export class MatchSimulator {
 								easing: cmd.easing,
 							};
 							this.ballHolderId = null;
+						} else if (cmd.type === "dribble") {
+							holder.targetX = cmd.toX;
+							holder.targetY = cmd.toY;
+							dribblerId = holder.id;
 						}
 						break;
 					}
@@ -140,8 +146,9 @@ export class MatchSimulator {
 			}
 		}
 
-		// Stage 4: Compute movement targets.
+		// Stage 4: Compute movement targets (skip the dribbler — target already set).
 		for (const p of this.players) {
+			if (p.id === dribblerId) continue;
 			const ctx = this.buildContext(p);
 			for (const action of MOVEMENT_ACTIONS) {
 				if (action.canExecute(ctx)) {
@@ -184,6 +191,11 @@ export class MatchSimulator {
 		}
 
 		// Stage 6: Advance ball flight and emit frame.
+		if (this.ballHolderId !== null) {
+			const holder = this.players.find((p) => p.id === this.ballHolderId);
+			if (holder) this.ball = { x: holder.x, y: holder.y };
+		}
+
 		if (this.ballFlight !== null) {
 			const {
 				fromX,

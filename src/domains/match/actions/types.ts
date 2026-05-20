@@ -27,7 +27,7 @@ export interface Action {
 	execute(ctx: ActionContext): XY;
 }
 
-export type BallCommandType = "pass";
+export type BallCommandType = "pass" | "dribble";
 
 export interface PassCommand {
 	type: "pass";
@@ -38,7 +38,13 @@ export interface PassCommand {
 	easing: number;
 }
 
-export type BallCommand = PassCommand;
+export interface DribbleCommand {
+	type: "dribble";
+	toX: number;
+	toY: number;
+}
+
+export type BallCommand = PassCommand | DribbleCommand;
 
 // Governs what the ball carrier does. Returns a BallCommand for this tick.
 export interface BallAction {
