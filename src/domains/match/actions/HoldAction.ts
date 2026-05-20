@@ -1,5 +1,5 @@
-import type { Action, ActionContext } from "./types";
 import type { XY } from "../types";
+import type { Action, ActionContext } from "./types";
 
 export const HoldAction: Action = {
 	canExecute(_ctx: ActionContext): boolean {

@@ -1,5 +1,5 @@
-import type { Action, ActionContext } from "./types";
 import type { XY } from "../types";
+import type { Action, ActionContext } from "./types";
 
 export const PRESSURE_RADIUS = 0.08;
 
@@ -10,7 +10,9 @@ export const PressAction: Action = {
 		const carrier = ctx.allPlayers.find((p) => p.id === ctx.ballHolderId);
 		if (!carrier) return false;
 		// Only opposition FWDs press.
-		return ctx.player.isHome !== carrier.isHome && ctx.player.position === "FWD";
+		return (
+			ctx.player.isHome !== carrier.isHome && ctx.player.position === "FWD"
+		);
 	},
 
 	execute(ctx: ActionContext): XY {

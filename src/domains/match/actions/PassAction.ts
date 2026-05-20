@@ -1,6 +1,6 @@
-import type { BallAction, ActionContext, BallCommand } from "./types";
-import { PRESSURE_RADIUS } from "./PressAction";
 import { nearest } from "../queries";
+import { PRESSURE_RADIUS } from "./PressAction";
+import type { ActionContext, BallAction, BallCommand } from "./types";
 
 function flightDuration(dx: number, dy: number): number {
 	const dist = Math.hypot(dx, dy);
@@ -38,7 +38,10 @@ export const PassAction: BallAction = {
 			const nearestOpp = nearest(t, opponents);
 			const d = Math.hypot(nearestOpp.x - t.x, nearestOpp.y - t.y);
 			const nearestOppBest = nearest(best, opponents);
-			const dBest = Math.hypot(nearestOppBest.x - best.x, nearestOppBest.y - best.y);
+			const dBest = Math.hypot(
+				nearestOppBest.x - best.x,
+				nearestOppBest.y - best.y,
+			);
 			return d > dBest ? t : best;
 		});
 

@@ -1,7 +1,12 @@
-import type { Action, ActionContext, BallAction, MatchPlayer } from "./actions/types";
 import { HoldAction } from "./actions/HoldAction";
 import { PassAction } from "./actions/PassAction";
 import { PressAction } from "./actions/PressAction";
+import type {
+	Action,
+	ActionContext,
+	BallAction,
+	MatchPlayer,
+} from "./actions/types";
 import { kickoffPosition } from "./positions";
 import type { MatchPhase, SimFrame, XY } from "./types";
 
@@ -159,13 +164,34 @@ export class MatchSimulator {
 				p.x = p.targetX;
 				p.y = p.targetY;
 			}
-			p.x = Math.max(0, Math.min(1, p.x + Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS));
-			p.y = Math.max(0, Math.min(1, p.y + Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS));
+			p.x = Math.max(
+				0,
+				Math.min(
+					1,
+					p.x + Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS,
+				),
+			);
+			p.y = Math.max(
+				0,
+				Math.min(
+					1,
+					p.y + Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS,
+				),
+			);
 		}
 
 		// Stage 6: Advance ball flight and emit frame.
 		if (this.ballFlight !== null) {
-			const { fromX, fromY, toX, toY, receiverId, startTick, durationTicks, easing } = this.ballFlight;
+			const {
+				fromX,
+				fromY,
+				toX,
+				toY,
+				receiverId,
+				startTick,
+				durationTicks,
+				easing,
+			} = this.ballFlight;
 			const elapsed = this.tick - startTick;
 			const t = Math.min(elapsed / durationTicks, 1);
 			const eased = 1 - (1 - t) ** easing;
@@ -184,10 +210,20 @@ export class MatchSimulator {
 			minute: Math.floor(this.tick / TICKS_PER_MINUTE),
 			phase: this.phase,
 			ball: { ...this.ball },
-			players: this.players.map(({ baseX: _bx, baseY: _by, phaseX: _px, phaseY: _py, freqX: _fx, freqY: _fy, ...rest }) => ({
-				...rest,
-				hasBall: rest.id === this.ballHolderId,
-			})),
+			players: this.players.map(
+				({
+					baseX: _bx,
+					baseY: _by,
+					phaseX: _px,
+					phaseY: _py,
+					freqX: _fx,
+					freqY: _fy,
+					...rest
+				}) => ({
+					...rest,
+					hasBall: rest.id === this.ballHolderId,
+				}),
+			),
 		};
 	}
 }
