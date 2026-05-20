@@ -1,7 +1,8 @@
 import type { MovementAction, MovingPlayer } from "./movement";
 import { holdPosition } from "./movement";
 import { kickoffPosition } from "./positions";
-import type { MatchPhase, SimFrame } from "./types";
+import { nearest } from "./queries";
+import type { MatchPhase, SimFrame, XY } from "./types";
 
 export interface PlayerSeed {
 	id: string;
@@ -40,10 +41,23 @@ const PHASE_MOVEMENT: Record<MatchPhase, MovementAction> = {
 	halftime: holdPosition,
 };
 
+interface BallFlight {
+	fromX: number;
+	fromY: number;
+	toX: number;
+	toY: number;
+	receiverId: string;
+	startTick: number;
+	durationTicks: number;
+}
+
 export class MatchSimulator {
 	private tick = 0;
 	private players: LivePlayer[];
 	private phase: MatchPhase = "kickoff";
+	private ball: XY = { x: 0.5, y: 0.5 };
+	private ballHolderId: string | null = null;
+	private ballFlight: BallFlight | null = null;
 
 	get done(): boolean {
 		return this.tick >= TOTAL_TICKS;
@@ -54,6 +68,9 @@ export class MatchSimulator {
 			...this.initialiseSide(homePlayers, true),
 			...this.initialiseSide(awayPlayers, false),
 		];
+		// Home FWD[0] (the kicker) starts with the ball at the centre spot.
+		const kicker = this.players.find((p) => p.isHome && p.position === "FWD");
+		if (kicker) this.ballHolderId = kicker.id;
 	}
 
 	private initialiseSide(seeds: PlayerSeed[], isHome: boolean): LivePlayer[] {
@@ -83,6 +100,40 @@ export class MatchSimulator {
 
 	advance(): SimFrame {
 		this.tick++;
+
+		// On the very first tick the kicker passes to their nearest teammate.
+		if (this.tick === 60 && this.ballHolderId !== null) {
+			const holder = this.players.find((p) => p.id === this.ballHolderId);
+			if (holder) {
+				const teammates = this.players.filter(
+					(p) => p.isHome === holder.isHome && p.id !== holder.id,
+				);
+				const target = nearest(holder, teammates);
+				const dist = Math.hypot(target.x - holder.x, target.y - holder.y);
+				this.ballFlight = {
+					fromX: holder.x,
+					fromY: holder.y,
+					toX: target.x,
+					toY: target.y,
+					receiverId: target.id,
+					startTick: this.tick,
+					durationTicks: Math.max(5, Math.round(dist * 80)),
+				};
+				this.ballHolderId = null;
+			}
+		}
+
+		// Advance ball in flight.
+		if (this.ballFlight !== null) {
+			const { fromX, fromY, toX, toY, receiverId, startTick, durationTicks } = this.ballFlight;
+			const elapsed = this.tick - startTick;
+			const t = Math.min(elapsed / durationTicks, 1);
+			this.ball = { x: fromX + (toX - fromX) * t, y: fromY + (toY - fromY) * t };
+			if (t >= 1) {
+				this.ballHolderId = receiverId;
+				this.ballFlight = null;
+			}
+		}
 
 		const movementAction = PHASE_MOVEMENT[this.phase];
 
@@ -125,7 +176,7 @@ export class MatchSimulator {
 			tick: this.tick,
 			minute: Math.floor(this.tick / TICKS_PER_MINUTE),
 			phase: this.phase,
-			ball: { x: 0.5, y: 0.5 },
+			ball: { ...this.ball },
 			players: this.players.map(
 				({
 					baseX: _bx,
@@ -137,7 +188,7 @@ export class MatchSimulator {
 					freqX: _fx,
 					freqY: _fy,
 					...rest
-				}) => ({ ...rest, hasBall: false }),
+				}) => ({ ...rest, hasBall: rest.id === this.ballHolderId }),
 			),
 		};
 	}
