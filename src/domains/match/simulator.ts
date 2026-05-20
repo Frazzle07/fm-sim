@@ -1,5 +1,7 @@
+import type { MovementAction, MovingPlayer } from "./movement";
+import { holdPosition } from "./movement";
 import { kickoffPosition } from "./positions";
-import type { MatchPhase, SimFrame, SimPlayer } from "./types";
+import type { MatchPhase, SimFrame } from "./types";
 
 export interface PlayerSeed {
 	id: string;
@@ -7,23 +9,36 @@ export interface PlayerSeed {
 	position: "GK" | "DEF" | "MID" | "FWD";
 }
 
-// Ticks per simulated minute (controls animation speed vs. game time).
 const TICKS_PER_MINUTE = 10;
 const TOTAL_MINUTES = 90;
 const TOTAL_TICKS = TOTAL_MINUTES * TICKS_PER_MINUTE;
 
-// How far a player can drift from their base position (pitch units 0..1).
+// Max distance a player moves toward their target per tick (pitch units 0..1).
+const MOVE_SPEED = 0.02;
+// Amplitude of sinusoidal micro-drift applied on top of the moved position.
 const JITTER_RADIUS = 0.0008;
 
-interface LivePlayer extends SimPlayer {
-	baseX: number;
-	baseY: number;
-	// Phase offsets for smooth sinusoidal drift, unique per player.
+interface LivePlayer extends MovingPlayer {
+	name: string;
+	targetX: number;
+	targetY: number;
+	// Per-player phase/frequency for independent sinusoidal micro-drift.
 	phaseX: number;
 	phaseY: number;
 	freqX: number;
 	freqY: number;
 }
+
+// Maps each match phase to the movement action that governs player targets.
+const PHASE_MOVEMENT: Record<MatchPhase, MovementAction> = {
+	kickoff: holdPosition,
+	open_play: holdPosition,
+	free_kick: holdPosition,
+	goal_kick: holdPosition,
+	corner: holdPosition,
+	goal: holdPosition,
+	halftime: holdPosition,
+};
 
 export class MatchSimulator {
 	private tick = 0;
@@ -36,12 +51,12 @@ export class MatchSimulator {
 
 	constructor(homePlayers: PlayerSeed[], awayPlayers: PlayerSeed[]) {
 		this.players = [
-			...this.initSide(homePlayers, true),
-			...this.initSide(awayPlayers, false),
+			...this.initialiseSide(homePlayers, true),
+			...this.initialiseSide(awayPlayers, false),
 		];
 	}
 
-	private initSide(seeds: PlayerSeed[], isHome: boolean): LivePlayer[] {
+	private initialiseSide(seeds: PlayerSeed[], isHome: boolean): LivePlayer[] {
 		const counters: Record<string, number> = {};
 		return seeds.map((seed) => {
 			const pos = seed.position;
@@ -56,7 +71,8 @@ export class MatchSimulator {
 				y,
 				baseX: x,
 				baseY: y,
-				// Random phase and frequency per player so drift looks organic.
+				targetX: x,
+				targetY: y,
 				phaseX: Math.random() * Math.PI * 2,
 				phaseY: Math.random() * Math.PI * 2,
 				freqX: 0.04 + Math.random() * 0.03,
@@ -68,31 +84,60 @@ export class MatchSimulator {
 	advance(): SimFrame {
 		this.tick++;
 
-		if (this.phase === "kickoff") {
-			for (const p of this.players) {
-				// Sinusoidal drift around base position — each axis independent.
-				const dx = Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS;
-				const dy = Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS;
+		const movementAction = PHASE_MOVEMENT[this.phase];
 
-				p.x = Math.max(0, Math.min(1, p.baseX + dx));
-				p.y = Math.max(0, Math.min(1, p.baseY + dy));
+		for (const p of this.players) {
+			// 1. Phase action sets the desired target.
+			const target = movementAction(p);
+			p.targetX = target.x;
+			p.targetY = target.y;
+
+			// 2. Move toward target at MOVE_SPEED per tick.
+			const dx = p.targetX - p.x;
+			const dy = p.targetY - p.y;
+			const dist = Math.hypot(dx, dy);
+			if (dist > MOVE_SPEED) {
+				p.x += (dx / dist) * MOVE_SPEED;
+				p.y += (dy / dist) * MOVE_SPEED;
+			} else {
+				p.x = p.targetX;
+				p.y = p.targetY;
 			}
+
+			// 3. Micro-jitter: sinusoidal drift on top of the moved position.
+			p.x = Math.max(
+				0,
+				Math.min(
+					1,
+					p.x + Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS,
+				),
+			);
+			p.y = Math.max(
+				0,
+				Math.min(
+					1,
+					p.y + Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS,
+				),
+			);
 		}
 
 		return {
 			tick: this.tick,
 			minute: Math.floor(this.tick / TICKS_PER_MINUTE),
-			phase: "kickoff",
+			phase: this.phase,
+			ball: { x: 0.5, y: 0.5 },
 			players: this.players.map(
 				({
 					baseX: _bx,
 					baseY: _by,
+					targetX: _tx,
+					targetY: _ty,
 					phaseX: _px,
 					phaseY: _py,
 					freqX: _fx,
 					freqY: _fy,
 					...rest
-				}) => rest,
+				}) => ({ ...rest, hasBall: false }),
 			),
 		};
 	}

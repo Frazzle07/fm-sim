@@ -10,6 +10,7 @@ export interface SimPlayer {
 	isHome: boolean;
 	x: number;
 	y: number;
+	hasBall: boolean;
 }
 
 export type MatchPhase =
@@ -26,4 +27,5 @@ export interface SimFrame {
 	minute: number;
 	phase: MatchPhase;
 	players: SimPlayer[];
+	ball: XY;
 }

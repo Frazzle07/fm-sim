@@ -115,6 +115,16 @@ function PitchMarkings() {
 	);
 }
 
+function Ball({ x, y }: { x: number; y: number }) {
+	const { px, py } = simToScreen(x, y);
+	return (
+		<g transform={`translate(${px},${py})`}>
+			<ellipse rx={4} ry={1.5} cy={5} fill="rgba(0,0,0,0.2)" />
+			<circle r={4} fill="#f5f0dc" stroke="rgba(0,0,0,0.4)" strokeWidth={0.75} />
+		</g>
+	);
+}
+
 function PlayerDot({ player, color }: { player: SimPlayer; color: string }) {
 	const { px, py } = simToScreen(player.x, player.y);
 	const lastName = player.name.split(" ").slice(-1)[0].slice(0, 6);
@@ -242,6 +252,7 @@ export default function MatchPitch({
 						.map((p) => (
 							<PlayerDot key={p.id} player={p} color={homeColor} />
 						))}
+					<Ball x={frame.ball.x} y={frame.ball.y} />
 				</svg>
 			</div>
 		</div>
