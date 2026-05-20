@@ -49,6 +49,7 @@ interface BallFlight {
 	receiverId: string;
 	startTick: number;
 	durationTicks: number;
+	easing: number;
 }
 
 export class MatchSimulator {
@@ -117,7 +118,8 @@ export class MatchSimulator {
 					toY: target.y,
 					receiverId: target.id,
 					startTick: this.tick,
-					durationTicks: Math.max(5, Math.round(dist * 80)),
+					durationTicks: Math.max(10, Math.round(dist * 400)),
+					easing: 2 + dist * 6,
 				};
 				this.ballHolderId = null;
 			}
@@ -125,10 +127,23 @@ export class MatchSimulator {
 
 		// Advance ball in flight.
 		if (this.ballFlight !== null) {
-			const { fromX, fromY, toX, toY, receiverId, startTick, durationTicks } = this.ballFlight;
+			const {
+				fromX,
+				fromY,
+				toX,
+				toY,
+				receiverId,
+				startTick,
+				durationTicks,
+				easing,
+			} = this.ballFlight;
 			const elapsed = this.tick - startTick;
 			const t = Math.min(elapsed / durationTicks, 1);
-			this.ball = { x: fromX + (toX - fromX) * t, y: fromY + (toY - fromY) * t };
+			const eased = 1 - (1 - t) ** easing;
+			this.ball = {
+				x: fromX + (toX - fromX) * eased,
+				y: fromY + (toY - fromY) * eased,
+			};
 			if (t >= 1) {
 				this.ballHolderId = receiverId;
 				this.ballFlight = null;
