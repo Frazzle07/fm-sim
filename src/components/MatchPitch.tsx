@@ -183,18 +183,19 @@ export default function MatchPitch({
 			const sim = simRef.current;
 			if (!sim) return;
 
+			const nowMs = performance.now();
 			let latestFrame: SimFrame | null = null;
 			if (ticksPerFrame >= 1) {
 				for (let i = 0; i < ticksPerFrame; i++) {
 					if (sim.done) break;
-					latestFrame = sim.advance();
+					latestFrame = sim.advance(nowMs);
 				}
 			} else {
 				frameCounterRef.current++;
 				const interval = Math.round(1 / ticksPerFrame);
 				if (frameCounterRef.current >= interval) {
 					frameCounterRef.current = 0;
-					if (!sim.done) latestFrame = sim.advance();
+					if (!sim.done) latestFrame = sim.advance(nowMs);
 				} else {
 					latestFrame = lastFrameRef.current;
 				}

@@ -2,9 +2,10 @@ import { nearest } from "../queries";
 import { PRESSURE_RADIUS } from "./PressAction";
 import type { ActionContext, BallAction, BallCommand } from "./types";
 
-function flightDuration(dx: number, dy: number): number {
+// Short pass (~0.15 dist) ≈ 600ms, long pass (~0.5 dist) ≈ 1400ms.
+function flightDurationMs(dx: number, dy: number): number {
 	const dist = Math.hypot(dx, dy);
-	return Math.max(10, Math.round(dist * 400));
+	return Math.round(300 + dist * 2200);
 }
 
 function flightEasing(dx: number, dy: number): number {
@@ -53,7 +54,7 @@ export const PassAction: BallAction = {
 			toX: target.x,
 			toY: target.y,
 			receiverId: target.id,
-			durationTicks: flightDuration(dx, dy),
+			durationMs: flightDurationMs(dx, dy),
 			easing: flightEasing(dx, dy),
 		};
 	},

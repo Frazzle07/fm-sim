@@ -16,6 +16,7 @@ export interface ActionContext {
 	readonly allPlayers: readonly MatchPlayer[];
 	readonly ball: XY;
 	readonly ballHolderId: string | null;
+	readonly ballReceiverId: string | null;
 	readonly phase: MatchPhase;
 	readonly tick: number;
 }
@@ -33,7 +34,7 @@ export interface PassCommand {
 	toX: number;
 	toY: number;
 	receiverId: string;
-	durationTicks: number;
+	durationMs: number;
 	easing: number;
 }
 

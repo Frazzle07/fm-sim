@@ -16,11 +16,11 @@ export interface PlayerSeed {
 	position: "GK" | "DEF" | "MID" | "FWD";
 }
 
-const TICKS_PER_MINUTE = 10;
+const TICKS_PER_MINUTE = 200;
 const TOTAL_MINUTES = 90;
 const TOTAL_TICKS = TOTAL_MINUTES * TICKS_PER_MINUTE;
 
-const MOVE_SPEED = 0.02;
+const MOVE_SPEED = 0.002;
 const JITTER_RADIUS = 0.0008;
 
 // Evaluated in order; first action whose canExecute returns true wins.
@@ -42,8 +42,8 @@ interface BallFlight {
 	toX: number;
 	toY: number;
 	receiverId: string;
-	startTick: number;
-	durationTicks: number;
+	startTimeMs: number;
+	durationMs: number;
 	easing: number;
 }
 
@@ -98,17 +98,18 @@ export class MatchSimulator {
 			allPlayers: this.players,
 			ball: this.ball,
 			ballHolderId: this.ballHolderId,
+			ballReceiverId: this.ballFlight?.receiverId ?? null,
 			phase: this.phase,
 			tick: this.tick,
 		};
 	}
 
-	advance(): SimFrame {
+	advance(nowMs: number): SimFrame {
 		// Stage 1: Increment tick.
 		this.tick++;
 
 		// Stage 2: Phase transitions.
-		if (this.tick === 10 && this.phase === "kickoff") {
+		if (this.tick === TICKS_PER_MINUTE && this.phase === "kickoff") {
 			this.phase = "open_play";
 		}
 
@@ -127,8 +128,8 @@ export class MatchSimulator {
 								toX: cmd.toX,
 								toY: cmd.toY,
 								receiverId: cmd.receiverId,
-								startTick: this.tick,
-								durationTicks: cmd.durationTicks,
+								startTimeMs: nowMs,
+								durationMs: cmd.durationMs,
 								easing: cmd.easing,
 							};
 							this.ballHolderId = null;
@@ -164,20 +165,22 @@ export class MatchSimulator {
 				p.x = p.targetX;
 				p.y = p.targetY;
 			}
-			p.x = Math.max(
-				0,
-				Math.min(
-					1,
-					p.x + Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS,
-				),
-			);
-			p.y = Math.max(
-				0,
-				Math.min(
-					1,
-					p.y + Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS,
-				),
-			);
+			if (this.phase === "kickoff") {
+				p.x = Math.max(
+					0,
+					Math.min(
+						1,
+						p.x + Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS,
+					),
+				);
+				p.y = Math.max(
+					0,
+					Math.min(
+						1,
+						p.y + Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS,
+					),
+				);
+			}
 		}
 
 		// Stage 6: Advance ball flight and emit frame.
@@ -188,12 +191,11 @@ export class MatchSimulator {
 				toX,
 				toY,
 				receiverId,
-				startTick,
-				durationTicks,
+				startTimeMs,
+				durationMs,
 				easing,
 			} = this.ballFlight;
-			const elapsed = this.tick - startTick;
-			const t = Math.min(elapsed / durationTicks, 1);
+			const t = Math.min((nowMs - startTimeMs) / durationMs, 1);
 			const eased = 1 - (1 - t) ** easing;
 			this.ball = {
 				x: fromX + (toX - fromX) * eased,
