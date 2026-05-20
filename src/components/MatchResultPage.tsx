@@ -4,7 +4,6 @@ import { sortedStandings } from "#/domains/league/standings";
 import type { Fixture, MatchEventType } from "#/domains/match/types";
 import { useGame } from "../GameContext";
 import MatchPitch from "./MatchPitch";
-import MatchPitchV2 from "./MatchPitchV2";
 
 const eventIcon: Record<MatchEventType, string> = {
 	goal: "⚽",
@@ -288,21 +287,11 @@ export default function MatchResultPage({ fixtureId }: MatchResultPageProps) {
 			{/* Live pitch */}
 			<Card className="mb-3">
 				<CardContent className="pt-4">
-					{/* <MatchPitch
-						result={fixture.result}
-						homeColor={hT?.color ?? "#888"}
-						awayColor={aT?.color ?? "#444"}
-						homeShortName={hT?.shortName ?? ""}
-						awayShortName={aT?.shortName ?? ""}
-					/> */}
-					<MatchPitchV2
-						result={fixture.result}
-						homeColor={hT?.color ?? "#888"}
-						awayColor={aT?.color ?? "#444"}
-						homeShortName={hT?.shortName ?? ""}
-						awayShortName={aT?.shortName ?? ""}
+					<MatchPitch
 						homePlayers={hT.players}
 						awayPlayers={aT.players}
+						homeColor={hT?.color ?? "#888"}
+						awayColor={aT?.color ?? "#444"}
 					/>
 				</CardContent>
 			</Card>

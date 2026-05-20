@@ -1,7 +1,7 @@
 import type { MovementAction, MovingPlayer } from "./movement";
-import { holdPosition } from "./movement";
+import { holdPosition, isUnderPressure, pressTarget } from "./movement";
+import { flightDuration, flightEasing, leastMarked } from "./pass";
 import { kickoffPosition } from "./positions";
-import { nearest } from "./queries";
 import type { MatchPhase, SimFrame, XY } from "./types";
 
 export interface PlayerSeed {
@@ -99,29 +99,45 @@ export class MatchSimulator {
 		});
 	}
 
+	private launchPass(holderId: string): void {
+		const holder = this.players.find((p) => p.id === holderId);
+		if (!holder) return;
+		const teammates = this.players.filter(
+			(p) => p.isHome === holder.isHome && p.id !== holder.id,
+		);
+		const opponents = this.players.filter((p) => p.isHome !== holder.isHome);
+		const target = leastMarked(teammates, opponents);
+		const from: XY = { x: holder.x, y: holder.y };
+		const to: XY = { x: target.x, y: target.y };
+		this.ballFlight = {
+			fromX: from.x,
+			fromY: from.y,
+			toX: to.x,
+			toY: to.y,
+			receiverId: target.id,
+			startTick: this.tick,
+			durationTicks: flightDuration(from, to),
+			easing: flightEasing(from, to),
+		};
+		this.ballHolderId = null;
+	}
+
 	advance(): SimFrame {
 		this.tick++;
 
-		// On the very first tick the kicker passes to their nearest teammate.
-		if (this.tick === 60 && this.ballHolderId !== null) {
+		// Kickoff: transition to open_play after a short delay.
+		if (this.tick === 10 && this.phase === "kickoff") {
+			this.phase = "open_play";
+		}
+
+		// Pressure check: if an opposition FWD enters the pressure radius, force a pass.
+		if (this.ballHolderId !== null && this.phase === "open_play") {
 			const holder = this.players.find((p) => p.id === this.ballHolderId);
 			if (holder) {
-				const teammates = this.players.filter(
-					(p) => p.isHome === holder.isHome && p.id !== holder.id,
+				const pressers = this.players.filter(
+					(p) => p.isHome !== holder.isHome && p.position === "FWD",
 				);
-				const target = nearest(holder, teammates);
-				const dist = Math.hypot(target.x - holder.x, target.y - holder.y);
-				this.ballFlight = {
-					fromX: holder.x,
-					fromY: holder.y,
-					toX: target.x,
-					toY: target.y,
-					receiverId: target.id,
-					startTick: this.tick,
-					durationTicks: Math.max(10, Math.round(dist * 400)),
-					easing: 2 + dist * 6,
-				};
-				this.ballHolderId = null;
+				if (isUnderPressure(holder, pressers)) this.launchPass(this.ballHolderId);
 			}
 		}
 
@@ -152,9 +168,24 @@ export class MatchSimulator {
 
 		const movementAction = PHASE_MOVEMENT[this.phase];
 
+		// In open_play, opposition FWDs press the ball carrier.
+		const ballCarrier =
+			this.phase === "open_play" && this.ballHolderId !== null
+				? (this.players.find((p) => p.id === this.ballHolderId) ?? null)
+				: null;
+
 		for (const p of this.players) {
-			// 1. Phase action sets the desired target.
-			const target = movementAction(p);
+			// 1. Determine target: pressing FWDs track the carrier; everyone else holds base.
+			let target: XY;
+			if (
+				ballCarrier !== null &&
+				p.isHome !== ballCarrier.isHome &&
+				p.position === "FWD"
+			) {
+				target = pressTarget(ballCarrier);
+			} else {
+				target = movementAction(p);
+			}
 			p.targetX = target.x;
 			p.targetY = target.y;
 
