@@ -1,6 +1,7 @@
-import type { MovementAction, MovingPlayer } from "./movement";
-import { holdPosition, isUnderPressure, pressTarget } from "./movement";
-import { flightDuration, flightEasing, leastMarked } from "./pass";
+import type { Action, ActionContext, BallAction, MatchPlayer } from "./actions/types";
+import { HoldAction } from "./actions/HoldAction";
+import { PassAction } from "./actions/PassAction";
+import { PressAction } from "./actions/PressAction";
 import { kickoffPosition } from "./positions";
 import type { MatchPhase, SimFrame, XY } from "./types";
 
@@ -14,32 +15,21 @@ const TICKS_PER_MINUTE = 10;
 const TOTAL_MINUTES = 90;
 const TOTAL_TICKS = TOTAL_MINUTES * TICKS_PER_MINUTE;
 
-// Max distance a player moves toward their target per tick (pitch units 0..1).
 const MOVE_SPEED = 0.02;
-// Amplitude of sinusoidal micro-drift applied on top of the moved position.
 const JITTER_RADIUS = 0.0008;
 
-interface LivePlayer extends MovingPlayer {
-	name: string;
+// Evaluated in order; first action whose canExecute returns true wins.
+const MOVEMENT_ACTIONS: Action[] = [PressAction, HoldAction];
+const BALL_ACTIONS: BallAction[] = [PassAction];
+
+interface LivePlayer extends MatchPlayer {
 	targetX: number;
 	targetY: number;
-	// Per-player phase/frequency for independent sinusoidal micro-drift.
 	phaseX: number;
 	phaseY: number;
 	freqX: number;
 	freqY: number;
 }
-
-// Maps each match phase to the movement action that governs player targets.
-const PHASE_MOVEMENT: Record<MatchPhase, MovementAction> = {
-	kickoff: holdPosition,
-	open_play: holdPosition,
-	free_kick: holdPosition,
-	goal_kick: holdPosition,
-	corner: holdPosition,
-	goal: holdPosition,
-	halftime: holdPosition,
-};
 
 interface BallFlight {
 	fromX: number;
@@ -69,7 +59,6 @@ export class MatchSimulator {
 			...this.initialiseSide(homePlayers, true),
 			...this.initialiseSide(awayPlayers, false),
 		];
-		// Home FWD[0] (the kicker) starts with the ball at the centre spot.
 		const kicker = this.players.find((p) => p.isHome && p.position === "FWD");
 		if (kicker) this.ballHolderId = kicker.id;
 	}
@@ -80,7 +69,6 @@ export class MatchSimulator {
 			const pos = seed.position;
 			const slotIndex = counters[pos] ?? 0;
 			counters[pos] = slotIndex + 1;
-
 			const { x, y } = kickoffPosition(pos, slotIndex, isHome);
 			return {
 				...seed,
@@ -99,60 +87,85 @@ export class MatchSimulator {
 		});
 	}
 
-	private launchPass(holderId: string): void {
-		const holder = this.players.find((p) => p.id === holderId);
-		if (!holder) return;
-		const teammates = this.players.filter(
-			(p) => p.isHome === holder.isHome && p.id !== holder.id,
-		);
-		const opponents = this.players.filter((p) => p.isHome !== holder.isHome);
-		const target = leastMarked(teammates, opponents);
-		const from: XY = { x: holder.x, y: holder.y };
-		const to: XY = { x: target.x, y: target.y };
-		this.ballFlight = {
-			fromX: from.x,
-			fromY: from.y,
-			toX: to.x,
-			toY: to.y,
-			receiverId: target.id,
-			startTick: this.tick,
-			durationTicks: flightDuration(from, to),
-			easing: flightEasing(from, to),
+	private buildContext(player: LivePlayer): ActionContext {
+		return {
+			player,
+			allPlayers: this.players,
+			ball: this.ball,
+			ballHolderId: this.ballHolderId,
+			phase: this.phase,
+			tick: this.tick,
 		};
-		this.ballHolderId = null;
 	}
 
 	advance(): SimFrame {
+		// Stage 1: Increment tick.
 		this.tick++;
 
-		// Kickoff: transition to open_play after a short delay.
+		// Stage 2: Phase transitions.
 		if (this.tick === 10 && this.phase === "kickoff") {
 			this.phase = "open_play";
 		}
 
-		// Pressure check: if an opposition FWD enters the pressure radius, force a pass.
-		if (this.ballHolderId !== null && this.phase === "open_play") {
+		// Stage 3: Compute ball command (ball-carrier decides what to do).
+		if (this.ballHolderId !== null) {
 			const holder = this.players.find((p) => p.id === this.ballHolderId);
 			if (holder) {
-				const pressers = this.players.filter(
-					(p) => p.isHome !== holder.isHome && p.position === "FWD",
-				);
-				if (isUnderPressure(holder, pressers)) this.launchPass(this.ballHolderId);
+				const ctx = this.buildContext(holder);
+				for (const ballAction of BALL_ACTIONS) {
+					if (ballAction.canExecute(ctx)) {
+						const cmd = ballAction.execute(ctx);
+						if (cmd.type === "pass") {
+							this.ballFlight = {
+								fromX: holder.x,
+								fromY: holder.y,
+								toX: cmd.toX,
+								toY: cmd.toY,
+								receiverId: cmd.receiverId,
+								startTick: this.tick,
+								durationTicks: cmd.durationTicks,
+								easing: cmd.easing,
+							};
+							this.ballHolderId = null;
+						}
+						break;
+					}
+				}
 			}
 		}
 
-		// Advance ball in flight.
+		// Stage 4: Compute movement targets.
+		for (const p of this.players) {
+			const ctx = this.buildContext(p);
+			for (const action of MOVEMENT_ACTIONS) {
+				if (action.canExecute(ctx)) {
+					const target = action.execute(ctx);
+					p.targetX = target.x;
+					p.targetY = target.y;
+					break;
+				}
+			}
+		}
+
+		// Stage 5: Apply movement.
+		for (const p of this.players) {
+			const dx = p.targetX - p.x;
+			const dy = p.targetY - p.y;
+			const dist = Math.hypot(dx, dy);
+			if (dist > MOVE_SPEED) {
+				p.x += (dx / dist) * MOVE_SPEED;
+				p.y += (dy / dist) * MOVE_SPEED;
+			} else {
+				p.x = p.targetX;
+				p.y = p.targetY;
+			}
+			p.x = Math.max(0, Math.min(1, p.x + Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS));
+			p.y = Math.max(0, Math.min(1, p.y + Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS));
+		}
+
+		// Stage 6: Advance ball flight and emit frame.
 		if (this.ballFlight !== null) {
-			const {
-				fromX,
-				fromY,
-				toX,
-				toY,
-				receiverId,
-				startTick,
-				durationTicks,
-				easing,
-			} = this.ballFlight;
+			const { fromX, fromY, toX, toY, receiverId, startTick, durationTicks, easing } = this.ballFlight;
 			const elapsed = this.tick - startTick;
 			const t = Math.min(elapsed / durationTicks, 1);
 			const eased = 1 - (1 - t) ** easing;
@@ -166,76 +179,15 @@ export class MatchSimulator {
 			}
 		}
 
-		const movementAction = PHASE_MOVEMENT[this.phase];
-
-		// In open_play, opposition FWDs press the ball carrier.
-		const ballCarrier =
-			this.phase === "open_play" && this.ballHolderId !== null
-				? (this.players.find((p) => p.id === this.ballHolderId) ?? null)
-				: null;
-
-		for (const p of this.players) {
-			// 1. Determine target: pressing FWDs track the carrier; everyone else holds base.
-			let target: XY;
-			if (
-				ballCarrier !== null &&
-				p.isHome !== ballCarrier.isHome &&
-				p.position === "FWD"
-			) {
-				target = pressTarget(ballCarrier);
-			} else {
-				target = movementAction(p);
-			}
-			p.targetX = target.x;
-			p.targetY = target.y;
-
-			// 2. Move toward target at MOVE_SPEED per tick.
-			const dx = p.targetX - p.x;
-			const dy = p.targetY - p.y;
-			const dist = Math.hypot(dx, dy);
-			if (dist > MOVE_SPEED) {
-				p.x += (dx / dist) * MOVE_SPEED;
-				p.y += (dy / dist) * MOVE_SPEED;
-			} else {
-				p.x = p.targetX;
-				p.y = p.targetY;
-			}
-
-			// 3. Micro-jitter: sinusoidal drift on top of the moved position.
-			p.x = Math.max(
-				0,
-				Math.min(
-					1,
-					p.x + Math.sin(this.tick * p.freqX + p.phaseX) * JITTER_RADIUS,
-				),
-			);
-			p.y = Math.max(
-				0,
-				Math.min(
-					1,
-					p.y + Math.cos(this.tick * p.freqY + p.phaseY) * JITTER_RADIUS,
-				),
-			);
-		}
-
 		return {
 			tick: this.tick,
 			minute: Math.floor(this.tick / TICKS_PER_MINUTE),
 			phase: this.phase,
 			ball: { ...this.ball },
-			players: this.players.map(
-				({
-					baseX: _bx,
-					baseY: _by,
-					targetX: _tx,
-					targetY: _ty,
-					phaseX: _px,
-					phaseY: _py,
-					freqX: _fx,
-					freqY: _fy,
-					...rest
-				}) => ({ ...rest, hasBall: rest.id === this.ballHolderId }),
-			),
+			players: this.players.map(({ baseX: _bx, baseY: _by, phaseX: _px, phaseY: _py, freqX: _fx, freqY: _fy, ...rest }) => ({
+				...rest,
+				hasBall: rest.id === this.ballHolderId,
+			})),
 		};
 	}
 }

@@ -40,16 +40,37 @@ The emergent behaviour where defenders pass between each other because midfielde
 **Header Duel**
 A contested long ball where the striker and a defender compete for possession in the air. Not yet implemented — deferred for a future phase.
 
-## Match Simulator V2
+## Match Simulator
 
-**TickPlan**
-The output of stage 1 (action selection) for a single tick. Contains two independent parts: a `Command` (the carrier's chosen action — pass, shoot, dribble, tackle) and a `positions` map (`Map<playerId, XY>`) of movement targets for all off-ball players. Stage 2 applies both without conflict — the command owns ball state, the positions map owns non-carrier player targets.
+**Simulator**
+The tick loop owner. Advances match state one tick at a time, sequences the four stages per tick, and emits a `SimFrame`. Does not make decisions — delegates all action selection to the action pipeline.
 
-**Strict Pipeline**
-The fixed stage ordering that guarantees ball and player positions are always computed from the same snapshot. Stages run in sequence with no cross-stage mutation: `selectActions → resolvePhysics → resolveState → emitFrame`. Each stage reads only from the previous stage's output.
+**MatchPlayer**
+A read-only, lean view of a player exposed to actions via `ActionContext`. Contains only: `id`, `name`, `position`, `isHome`, `x`, `y`. Simulator internals (jitter phases, movement frequencies) are not exposed.
 
-**Positioning Pass**
-Sub-step 1a of `selectActions`. Computes movement targets for all off-ball players before any carrier action fires. The carrier's pass action reads `receiver.targetX/targetY` (not current position) to aim the ball into space the receiver is already running into.
+**ActionContext**
+The read-only snapshot passed to every action each tick. Contains: `player` (the acting player as `MatchPlayer`), `allPlayers` (all players as `MatchPlayer[]`), `ball`, `ballHolderId`, `phase`, `tick`.
 
-**Pass Into Space**
-Default pass behaviour in v2. The ball is aimed at the receiver's `targetX/targetY` (computed during the positioning pass) rather than their current position. The receiver runs onto the ball rather than stopping to receive it. Curved runs that react to ball flight are a future feature.
+**Action**
+Governs movement for a single player. Implements `canExecute(ctx): boolean` and `execute(ctx): XY`. The simulator evaluates the movement action pipeline in priority order — the first action whose `canExecute` returns true fires and returns a movement target.
+
+**BallAction**
+Governs what the ball carrier does with the ball. Implements `canExecute(ctx): boolean` and `execute(ctx): BallCommand`. Evaluated against the ball action pipeline (pass → shoot → dribble) for the carrier only.
+
+**BallCommand**
+The output of a `BallAction`. A discriminated union describing what happens to the ball: `{ type: "pass", receiverId, flight }` or similar. The simulator applies the command after all movement targets are computed.
+
+**Movement Action Pipeline**
+Priority-ordered list of `Action` objects evaluated each tick for every player. First action whose `canExecute` returns true fires. Lives in `actions/` — adding a new movement behaviour means adding a new action file, not editing the simulator.
+
+**Ball Action Pipeline**
+Priority-ordered list of `BallAction` objects evaluated each tick for the ball carrier only. Ordered: pass → shoot → dribble (most constrained first).
+
+**Tick Stages**
+The fixed sequence within each `advance()` call:
+1. Compute movement targets — evaluate movement pipeline for all players
+2. Compute ball command — evaluate ball action pipeline for the carrier
+3. Apply movement — step each player toward their target
+4. Apply ball command — update ball flight / holder
+5. Advance ball flight — interpolate ball position
+6. Emit frame
