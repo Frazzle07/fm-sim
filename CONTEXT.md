@@ -64,7 +64,13 @@ The output of a `BallAction`. A discriminated union describing what happens to t
 Priority-ordered list of `Action` objects evaluated each tick for every player. First action whose `canExecute` returns true fires. Lives in `actions/` — adding a new movement behaviour means adding a new action file, not editing the simulator.
 
 **Ball Action Pipeline**
-Priority-ordered list of `BallAction` objects evaluated each tick for the ball carrier only. Ordered: pass → shoot → dribble (most constrained first).
+Priority-ordered list of `BallAction` objects evaluated each tick for the ball carrier only. Ordered: dribble → pass → shoot. Dribble fires first when the carrier has open space ahead (no opponent within `DRIBBLE_SPACE_RADIUS` in the attacking direction); pass fires when a lane exists; shoot when in range. Dribble is not a pure fallback — it is a genuine first choice when space exists.
+
+**Dribble**
+A `BallAction` that moves the ball carrier forward (toward the opponent's goal) by a fixed step when open space exists ahead. The ball stays glued to the carrier — `ball.x = carrier.x, ball.y = carrier.y` throughout. Returns `{ type: "dribble", toX, toY }`. The simulator sets the carrier's movement target to `(toX, toY)`. On reaching the target, the pipeline re-evaluates normally — no special transition. `DRIBBLE_SPACE_RADIUS = 0.15` (opponent-free zone ahead required to trigger).
+
+**Dribble Step**
+The fixed forward distance a carrier moves per dribble evaluation. Small enough to re-evaluate frequently; large enough to produce visible forward progress. Tunable constant.
 
 **Tick Stages**
 The fixed sequence within each `advance()` call:

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { distToSegment } from "#/domains/match/queries";
 import type { PlayerSeed } from "#/domains/match/simulator";
 import { MatchSimulator } from "#/domains/match/simulator";
 import type { SimFrame, SimPlayer } from "#/domains/match/types";
@@ -6,6 +7,76 @@ import type { SimFrame, SimPlayer } from "#/domains/match/types";
 const W = 700;
 const H = 440;
 const PAD = 24;
+const LANE_BLOCK_RADIUS = 0.06; // keep in sync with PassAction.ts
+
+function PassLaneOverlay({ frame }: { frame: SimFrame }) {
+	const holder = frame.players.find((p) => p.hasBall);
+	if (!holder) return null;
+
+	const teammates = frame.players.filter(
+		(p) => p.isHome === holder.isHome && p.id !== holder.id,
+	);
+	const opponents = frame.players.filter((p) => p.isHome !== holder.isHome);
+
+	return (
+		<>
+			{teammates.map((t) => {
+				const blockers = opponents.filter(
+					(o) => distToSegment(o, holder, t) < LANE_BLOCK_RADIUS,
+				);
+				const blocked = blockers.length > 0;
+
+				const { px: x1, py: y1 } = simToScreen(holder.x, holder.y);
+				const { px: x2, py: y2 } = simToScreen(t.x, t.y);
+
+				// Tube half-width: radius is in sim units along the x axis (→ screen y),
+				// so scale by H to get pixels.
+				const tubeHalfW = LANE_BLOCK_RADIUS * H;
+
+				const dx = x2 - x1;
+				const dy = y2 - y1;
+				const len = Math.hypot(dx, dy);
+				if (len === 0) return null;
+				const nx = (-dy / len) * tubeHalfW;
+				const ny = (dx / len) * tubeHalfW;
+
+				const points = [
+					[x1 + nx, y1 + ny],
+					[x2 + nx, y2 + ny],
+					[x2 - nx, y2 - ny],
+					[x1 - nx, y1 - ny],
+				]
+					.map(([px, py]) => `${px},${py}`)
+					.join(" ");
+
+				return (
+					<g key={t.id}>
+						<polygon
+							points={points}
+							fill={blocked ? "rgba(255,60,60,0.15)" : "rgba(60,255,120,0.12)"}
+							stroke={blocked ? "rgba(255,80,80,0.5)" : "rgba(60,220,100,0.4)"}
+							strokeWidth={1}
+						/>
+						{blockers.map((o) => {
+							const { px, py } = simToScreen(o.x, o.y);
+							return (
+								<circle
+									key={o.id}
+									cx={px}
+									cy={py}
+									r={10}
+									fill="none"
+									stroke="rgba(255,80,80,0.8)"
+									strokeWidth={1.5}
+								/>
+							);
+						})}
+					</g>
+				);
+			})}
+		</>
+	);
+}
 
 // sim.y → screen.x (home attacks right), sim.x → screen.y
 function simToScreen(x: number, y: number): { px: number; py: number } {
@@ -157,6 +228,7 @@ interface Props {
 	homeColor: string;
 	awayColor: string;
 	ticksPerFrame?: number;
+	showLanes?: boolean;
 	onFrame?: (frame: SimFrame) => void;
 }
 
@@ -166,6 +238,7 @@ export default function MatchPitch({
 	homeColor,
 	awayColor,
 	ticksPerFrame = 1,
+	showLanes = false,
 	onFrame,
 }: Props) {
 	const simRef = useRef<MatchSimulator | null>(null);
@@ -253,6 +326,7 @@ export default function MatchPitch({
 						.map((p) => (
 							<PlayerDot key={p.id} player={p} color={homeColor} />
 						))}
+					{showLanes && <PassLaneOverlay frame={frame} />}
 					<Ball x={frame.ball.x} y={frame.ball.y} />
 				</svg>
 			</div>
