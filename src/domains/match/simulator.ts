@@ -27,6 +27,9 @@ const JITTER_RADIUS = 0.0008;
 
 const TACKLE_SUCCESS_RATE = 0.4;
 
+const INTERCEPTION_RADIUS = 0.04;
+const INTERCEPTION_BASE_CHANCE = 0.7;
+
 // Evaluated in order; first action whose canExecute returns true wins.
 const MOVEMENT_ACTIONS: Action[] = [PressAction, HoldAction];
 const BALL_ACTIONS: BallAction[] = [DribbleAction, PassAction];
@@ -51,6 +54,9 @@ interface BallFlight {
 	easing: number;
 }
 
+// Ticks after gaining possession during which a player is immune to interception.
+const INTERCEPTION_COOLDOWN_TICKS = 40;
+
 export class MatchSimulator {
 	private tick = 0;
 	private players: LivePlayer[];
@@ -58,6 +64,8 @@ export class MatchSimulator {
 	private ball: XY = { x: 0.5, y: 0.5 };
 	private ballHolderId: string | null = null;
 	private ballFlight: BallFlight | null = null;
+	// Maps player id → tick at which they last gained possession (intercept or receive).
+	private possessionTick: Map<string, number> = new Map();
 
 	get done(): boolean {
 		return this.tick >= TOTAL_TICKS;
@@ -163,10 +171,14 @@ export class MatchSimulator {
 						// Stop the tackler in place so the ball doesn't lurch toward their stale target
 						p.targetX = p.x;
 						p.targetY = p.y;
-						console.debug(`[Tackle] ${cmd.tacklerId} won the ball from ${cmd.targetId}`);
+						console.debug(
+							`[Tackle] ${cmd.tacklerId} won the ball from ${cmd.targetId}`,
+						);
 						continue;
 					}
-					console.debug(`[Tackle] ${cmd.tacklerId} failed to tackle ${cmd.targetId}`);
+					console.debug(
+						`[Tackle] ${cmd.tacklerId} failed to tackle ${cmd.targetId}`,
+					);
 				}
 			}
 
@@ -233,8 +245,36 @@ export class MatchSimulator {
 				x: fromX + (toX - fromX) * eased,
 				y: fromY + (toY - fromY) * eased,
 			};
-			if (t >= 1) {
+
+			// Check for interceptions: opponent players near the ball's current position.
+			const receiver = this.players.find((p) => p.id === receiverId);
+			if (receiver) {
+				const opponents = this.players.filter(
+					(p) => p.isHome !== receiver.isHome,
+				);
+				for (const opp of opponents) {
+					const lastGained = this.possessionTick.get(opp.id) ?? -Infinity;
+					if (this.tick - lastGained < INTERCEPTION_COOLDOWN_TICKS) continue;
+					const d = Math.hypot(opp.x - this.ball.x, opp.y - this.ball.y);
+					if (d < INTERCEPTION_RADIUS) {
+						const chance =
+							INTERCEPTION_BASE_CHANCE * (1 - d / INTERCEPTION_RADIUS);
+						if (Math.random() < chance) {
+							this.ballHolderId = opp.id;
+							this.ballFlight = null;
+							this.possessionTick.set(opp.id, this.tick);
+							console.debug(
+								`[Intercept] ${opp.name} intercepted the pass near (${this.ball.x.toFixed(2)}, ${this.ball.y.toFixed(2)})`,
+							);
+							break;
+						}
+					}
+				}
+			}
+
+			if (this.ballFlight !== null && t >= 1) {
 				this.ballHolderId = receiverId;
+				this.possessionTick.set(receiverId, this.tick);
 				this.ballFlight = null;
 			}
 		}
