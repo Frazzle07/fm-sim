@@ -10,10 +10,8 @@ export const PressAction: Action = {
 		if (targetId === null) return false;
 		const target = ctx.allPlayers.find((p) => p.id === targetId);
 		if (!target) return false;
-		// Only opposition FWDs press.
-		return (
-			ctx.player.isHome !== target.isHome && ctx.player.position === "FWD"
-		);
+		// GKs don't press; all outfield opposition players do.
+		return ctx.player.isHome !== target.isHome && ctx.player.position === "FWD";
 	},
 
 	execute(ctx: ActionContext): XY {

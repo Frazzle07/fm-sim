@@ -16,7 +16,8 @@ export const DribbleAction: BallAction = {
 		);
 
 		const isTackled = opponents.some(
-			(opp) => Math.hypot(opp.x - ctx.player.x, opp.y - ctx.player.y) < TACKLED_RADIUS,
+			(opp) =>
+				Math.hypot(opp.x - ctx.player.x, opp.y - ctx.player.y) < TACKLED_RADIUS,
 		);
 		if (isTackled) return false;
 
@@ -28,16 +29,19 @@ export const DribbleAction: BallAction = {
 			return forwardDist <= DRIBBLE_FORWARD_DEPTH;
 		});
 
-		console.debug(
-			`[Dribble] canExecute for ${ctx.player.name} (${ctx.player.isHome ? "home" : "away"}, y=${ctx.player.y.toFixed(3)}): blockers=${blockers.length} ${blockers.map((o) => `${o.name} fwd=${((o.y - ctx.player.y) * attackingDir).toFixed(3)} lat=${Math.abs(o.x - ctx.player.x).toFixed(3)}`).join(", ")}`,
-		);
+		// console.debug(
+		// 	`[Dribble] canExecute for ${ctx.player.name} (${ctx.player.isHome ? "home" : "away"}, y=${ctx.player.y.toFixed(3)}): blockers=${blockers.length} ${blockers.map((o) => `${o.name} fwd=${((o.y - ctx.player.y) * attackingDir).toFixed(3)} lat=${Math.abs(o.x - ctx.player.x).toFixed(3)}`).join(", ")}`,
+		// );
 
 		return blockers.length === 0;
 	},
 
 	execute(ctx: ActionContext): BallCommand {
 		const attackingDir = ctx.player.isHome ? 1 : -1;
-		const toY = Math.max(0, Math.min(1, ctx.player.y + DRIBBLE_STEP * attackingDir));
+		const toY = Math.max(
+			0,
+			Math.min(1, ctx.player.y + DRIBBLE_STEP * attackingDir),
+		);
 
 		return {
 			type: "dribble",

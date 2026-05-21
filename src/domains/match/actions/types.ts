@@ -44,7 +44,14 @@ export interface DribbleCommand {
 	toY: number;
 }
 
-export type BallCommand = PassCommand | DribbleCommand;
+// Emitted by a defending player's TackleAction. The simulator resolves success/fail.
+export interface TackleCommand {
+	type: "tackle";
+	tacklerId: string;
+	targetId: string;
+}
+
+export type BallCommand = PassCommand | DribbleCommand | TackleCommand;
 
 // Governs what the ball carrier does. Returns a BallCommand for this tick.
 export interface BallAction {

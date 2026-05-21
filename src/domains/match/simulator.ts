@@ -2,6 +2,7 @@ import { DribbleAction } from "./actions/DribbleAction";
 import { HoldAction } from "./actions/HoldAction";
 import { PassAction } from "./actions/PassAction";
 import { PressAction } from "./actions/PressAction";
+import { TackleAction } from "./actions/TackleAction";
 import type {
 	Action,
 	ActionContext,
@@ -23,6 +24,8 @@ const TOTAL_TICKS = TOTAL_MINUTES * TICKS_PER_MINUTE;
 
 const MOVE_SPEED = 0.002;
 const JITTER_RADIUS = 0.0008;
+
+const TACKLE_SUCCESS_RATE = 0.4;
 
 // Evaluated in order; first action whose canExecute returns true wins.
 const MOVEMENT_ACTIONS: Action[] = [PressAction, HoldAction];
@@ -147,9 +150,26 @@ export class MatchSimulator {
 		}
 
 		// Stage 4: Compute movement targets (skip the dribbler — target already set).
+		// Also check for tackle attempts from opponents of the ball holder.
 		for (const p of this.players) {
 			if (p.id === dribblerId) continue;
 			const ctx = this.buildContext(p);
+
+			if (TackleAction.canExecute(ctx)) {
+				const cmd = TackleAction.execute(ctx);
+				if (cmd.type === "tackle") {
+					if (Math.random() < TACKLE_SUCCESS_RATE) {
+						this.ballHolderId = cmd.tacklerId;
+						// Stop the tackler in place so the ball doesn't lurch toward their stale target
+						p.targetX = p.x;
+						p.targetY = p.y;
+						console.debug(`[Tackle] ${cmd.tacklerId} won the ball from ${cmd.targetId}`);
+						continue;
+					}
+					console.debug(`[Tackle] ${cmd.tacklerId} failed to tackle ${cmd.targetId}`);
+				}
+			}
+
 			for (const action of MOVEMENT_ACTIONS) {
 				if (action.canExecute(ctx)) {
 					const target = action.execute(ctx);
