@@ -146,6 +146,14 @@ export class MatchSimulator {
 								easing: cmd.easing,
 							};
 							this.ballHolderId = null;
+							// Pin the receiver in place so they wait for the ball.
+							const recv = this.players.find(
+								(p) => p.id === cmd.receiverId,
+							);
+							if (recv) {
+								recv.targetX = recv.x;
+								recv.targetY = recv.y;
+							}
 						} else if (cmd.type === "dribble") {
 							holder.targetX = cmd.toX;
 							holder.targetY = cmd.toY;
@@ -157,10 +165,12 @@ export class MatchSimulator {
 			}
 		}
 
-		// Stage 4: Compute movement targets (skip the dribbler — target already set).
-		// Also check for tackle attempts from opponents of the ball holder.
+		// Stage 4: Compute movement targets (skip the dribbler — target already set;
+		// skip the receiver — they hold position until the ball arrives).
+		const receiverId = this.ballFlight?.receiverId ?? null;
 		for (const p of this.players) {
 			if (p.id === dribblerId) continue;
+			if (p.id === receiverId) continue;
 			const ctx = this.buildContext(p);
 
 			if (TackleAction.canExecute(ctx)) {
