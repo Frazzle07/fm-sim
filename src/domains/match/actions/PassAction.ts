@@ -6,12 +6,18 @@ import type {
 	MatchPlayer,
 } from "./types";
 
-const PROXIMITY_WEIGHT = 2;
-const LANE_BLOCK_RADIUS = 0.03;
-const LANE_BLOCK_PENALTY = 10;
+// Bounded [0, PROXIMITY_CAP] so a nearby teammate doesn't swamp lane/openness scores.
+const PROXIMITY_CAP = 4;
+const PROXIMITY_WEIGHT = 0.6;
+const LANE_BLOCK_RADIUS = 0.05;
+const LANE_BLOCK_PENALTY = 8;
 // Opponent closer than this to the target teammate = heavily marked
 const MARKING_RADIUS = 0.08;
 const MARKING_PENALTY = 6;
+// Reward open passing lanes: bonus proportional to how clear the path is
+const LANE_SAFETY_WEIGHT = 6;
+// Reward teammates who have space to receive
+const OPENNESS_WEIGHT = 5;
 const POSITION_BONUS: Record<MatchPlayer["position"], number> = {
 	FWD: 2,
 	MID: 1,
@@ -66,16 +72,30 @@ export const PassAction: BallAction = {
 
 		const scored = teammates.map((t) => {
 			const distToT = Math.hypot(t.x - ctx.player.x, t.y - ctx.player.y);
-			const nearestOpp = nearest(t, opponents);
-			const openness = Math.hypot(nearestOpp.x - t.x, nearestOpp.y - t.y);
-			const proximity = PROXIMITY_WEIGHT / (distToT + 0.01);
+			// How close is the nearest opponent to the receiver (space to receive)
+			const nearestOppToT = nearest(t, opponents);
+			const openness = Math.hypot(nearestOppToT.x - t.x, nearestOppToT.y - t.y);
+			// How clear is the passing lane (min dist of any opponent to the lane)
+			const laneDistances = opponents.map((o) =>
+				distToSegment(o, ctx.player, t),
+			);
+			const minLaneDist = Math.min(...laneDistances);
+			const laneSafety = Math.min(minLaneDist / LANE_BLOCK_RADIUS, 1);
+
+			const proximity = Math.min(PROXIMITY_WEIGHT / (distToT + 0.01), PROXIMITY_CAP);
 			const markingPenalty = openness < MARKING_RADIUS ? MARKING_PENALTY : 0;
 			const positionBonus = POSITION_BONUS[t.position];
-			const blockers = opponents.filter(
-				(o) => distToSegment(o, ctx.player, t) < LANE_BLOCK_RADIUS,
-			).length;
+			const blockers = laneDistances.filter((d) => d < LANE_BLOCK_RADIUS).length;
 			const lanePenalty = blockers * LANE_BLOCK_PENALTY;
-			const score = proximity + positionBonus - markingPenalty - lanePenalty;
+			const laneSafetyBonus = LANE_SAFETY_WEIGHT * laneSafety;
+			const opennessBonus = OPENNESS_WEIGHT * Math.min(openness / MARKING_RADIUS, 1);
+			const score =
+				proximity +
+				positionBonus +
+				laneSafetyBonus +
+				opennessBonus -
+				markingPenalty -
+				lanePenalty;
 			return {
 				t,
 				score,
