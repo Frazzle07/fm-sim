@@ -19,6 +19,9 @@ The priority-ordered list of `Action` objects evaluated each tick for the ball c
 **Off-ball Positioning**
 Player movement targets for players not directly involved in the current action. Handled as a separate concern outside the action pipeline — a `getOffBallTargets` style function called alongside (not inside) actions. During buildup: possessing team spreads to create outlets; opposing forwards press the holder and shadow passing lanes.
 
+**Press Role Assignment**
+When multiple forwards are pressing, each forward self-assigns its role each tick by comparing distances to the ball holder. The closest forward becomes the **primary presser** and moves directly toward the holder. All other forwards become **lane shadows** — each positions itself at the midpoint between the holder and the best available forward pass receiver (highest `pressureScore × progressionValue` among the holder's teammates ahead of the ball). Role assignment is stateless and recalculated independently by each forward each tick; no shared state or simulator changes are needed.
+
 **Phase**
 A named stage of the match state machine. Current phases: `kickoff`, `buildup`, `midfield`, `attack`, `chance`, `goal`, `save`, `counter`, `corner`. Each phase governs player movement targets and stochastic transitions.
 

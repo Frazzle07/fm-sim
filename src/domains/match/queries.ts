@@ -11,8 +11,15 @@ export function distToSegment(p: Located, a: Located, b: Located): number {
 	const dy = b.y - a.y;
 	const lenSq = dx * dx + dy * dy;
 	if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-	const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+	const t = Math.max(
+		0,
+		Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq),
+	);
 	return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+export function dist(a: Located, b: Located): number {
+	return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // Returns the element from `candidates` closest to `origin`.

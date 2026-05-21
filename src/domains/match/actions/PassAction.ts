@@ -19,10 +19,18 @@ const POSITION_BONUS: Record<MatchPlayer["position"], number> = {
 	GK: -2,
 };
 
-// Short pass (~0.15 dist) ≈ 600ms, long pass (~0.5 dist) ≈ 1400ms.
+// Speed factor: 1.0 = crisp pass, >1 = slower/heavier.
+// Averages two uniforms (triangular, range [0,1], mean 0.5) then shifts so
+// the range is [0.8, 1.8] with mean ~1.3 — passes are on average 30% slower
+// than the baseline, with a tail of heavy touches that are 80% slower.
+function passSpeedFactor(): number {
+	return (Math.random() + Math.random()) / 2 + 0.8;
+}
+
+// Short pass (~0.15 dist) ≈ 600ms, long pass (~0.5 dist) ≈ 1400ms (at factor 1.0).
 function flightDurationMs(dx: number, dy: number): number {
 	const dist = Math.hypot(dx, dy);
-	return Math.round(300 + dist * 2200);
+	return Math.round((300 + dist * 2200) * passSpeedFactor());
 }
 
 function flightEasing(dx: number, dy: number): number {
