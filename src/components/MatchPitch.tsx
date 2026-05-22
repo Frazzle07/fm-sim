@@ -30,8 +30,8 @@ function PassLaneOverlay({ frame }: { frame: SimFrame }) {
 				const { px: x2, py: y2 } = simToScreen(t.x, t.y);
 
 				// Tube half-width: radius is in sim units along the x axis (→ screen y),
-				// so scale by H to get pixels.
-				const tubeHalfW = LANE_BLOCK_RADIUS * H;
+				// so scale by the playable height to get pixels.
+				const tubeHalfW = LANE_BLOCK_RADIUS * (H - PAD * 2);
 
 				const dx = x2 - x1;
 				const dy = y2 - y1;
@@ -79,8 +79,12 @@ function PassLaneOverlay({ frame }: { frame: SimFrame }) {
 }
 
 // sim.y → screen.x (home attacks right), sim.x → screen.y
+// Maps [0,1] into the pitch markings area, excluding the PAD border.
 function simToScreen(x: number, y: number): { px: number; py: number } {
-	return { px: y * W, py: x * H };
+	return {
+		px: PAD + y * (W - PAD * 2),
+		py: PAD + x * (H - PAD * 2),
+	};
 }
 
 function PitchMarkings() {
