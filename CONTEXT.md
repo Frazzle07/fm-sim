@@ -19,8 +19,32 @@ The priority-ordered list of `Action` objects evaluated each tick for the ball c
 **Off-ball Positioning**
 Player movement targets for players not directly involved in the current action. Handled as a separate concern outside the action pipeline — a `getOffBallTargets` style function called alongside (not inside) actions. During buildup: possessing team spreads to create outlets; opposing forwards press the holder and shadow passing lanes.
 
+**Space Score**
+The attractiveness of a candidate position for an off-ball attacker. Combines two measures: `openness` (distance to nearest defender — higher is better) and `laneSafety` (clearance of the passing lane from ball holder to that position — higher means less blocked). A player gradient-climbs toward positions with increasing space score each tick.
+
+**Gradient Climb**
+The off-ball movement strategy for attacking players. Each tick, a player probes 8 compass directions at a distance proportional to their current space score (more space → larger probe, more space → bigger stride). They move toward whichever probe position scores highest. Bounded by a hard rectangular zone derived from their `baseX`/`baseY` anchor — players cannot leave the zone even if space lies beyond it.
+
+**Tactical Zone**
+The hard rectangular bounds within which a player's gradient climb is constrained. Derived from `baseX`/`baseY` plus a role-specific radius. FWDs have a wide lateral range and deep forward range; DEFs stay tight to their line. Prevents players drifting to absurd positions while still allowing organic repositioning within their area of responsibility.
+
+**Man-Marking**
+The defensive off-ball behaviour for DEFs and MIDs when the opposing team has possession. Each defending player independently runs a greedy nearest-pair assignment: rank all (defender, attacker) pairs by distance, assign closest pair first, repeat. Each defender reads off their own slot. Assigned defenders track their attacker — moving toward them to deny space. Stateless, recalculated per tick, no simulator changes required.
+
+**Covering Position**
+The fallback position for a defender with no attacker assigned (surplus defenders after man-marking). The defender holds a position between the ball and their own goal: `x` tracks the ball laterally, `y` holds the defensive line depth (`baseY`). Produces a sweeper/libero shape without explicit role assignment.
+
 **Press Role Assignment**
 When multiple forwards are pressing, each forward self-assigns its role each tick by comparing distances to the ball holder. The closest forward becomes the **primary presser** and moves directly toward the holder. All other forwards become **lane shadows** — each positions itself at the midpoint between the holder and the best available forward pass receiver (highest `pressureScore × progressionValue` among the holder's teammates ahead of the ball). Role assignment is stateless and recalculated independently by each forward each tick; no shared state or simulator changes are needed.
+
+**Zonal Press**
+The rule governing which position group presses based on where the ball is on the pitch. Divided into three zones relative to the defending team's direction of attack: (1) **opposition defensive third** — FWDs press; (2) **midfield third** — MIDs press, FWDs drop; (3) **own defensive third** — DEFs rely on tackling, MIDs and FWDs hold shape. Zone boundaries are at `y=0.33` and `y=0.67` (pitch-absolute), interpreted relative to each team's attacking direction. A player only presses when the ball is in the zone assigned to their position group.
+
+**Lane**
+The implicit vertical band of the pitch a player is responsible for, derived from their `baseX`. Players press the opposition player — within the correct position tier for the current **Zonal Press** zone — whose `baseX` is closest to their own `baseX`. No explicit lane field exists; lane identity is inferred from `baseX` proximity each tick.
+
+**Defensive Line**
+The target depth of the entire defending team, computed each tick from ball `y` regardless of which team has possession. When the ball is in the opposition's half, the line pushes up toward the halfway line; when it is in the team's own half, the line holds near `baseY`. The shift is linear and proportional to how deep into the opposition half the ball sits. Hard caps: outfield players cannot cross the halfway line (`y=0.5`); GKs advance only slightly (home cap `y=0.12`, away cap `y=0.88`). `x` positions are unaffected — the line moves as a unit in depth only. Applied via `HoldAction` as the fallback movement target for all players not currently pressing or tackling.
 
 **Phase**
 A named stage of the match state machine. Current phases: `kickoff`, `buildup`, `midfield`, `attack`, `chance`, `goal`, `save`, `counter`, `corner`. Each phase governs player movement targets and stochastic transitions.
