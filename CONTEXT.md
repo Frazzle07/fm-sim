@@ -22,17 +22,23 @@ Player movement targets for players not directly involved in the current action.
 **Space Score**
 The attractiveness of a candidate position for an off-ball attacker. Combines two measures: `openness` (distance to nearest defender — higher is better) and `laneSafety` (clearance of the passing lane from ball holder to that position — higher means less blocked). A player gradient-climbs toward positions with increasing space score each tick.
 
+**Role**
+A sub-classification within a position group that governs off-ball movement shape and Tactical Zone. Exposed on `MatchPlayer` so any action can specialise behaviour by role. Current roles: `LW` (left winger), `RW` (right winger), `CF` (centre forward), `CAM`, `CM`, `CDM`, `LB`, `CB`, `RB`. Position (GK/DEF/MID/FWD) continues to govern Zonal Press logic; Role governs movement.
+
 **Gradient Climb**
-The off-ball movement strategy for attacking players. Each tick, a player probes 8 compass directions at a distance proportional to their current space score (more space → larger probe, more space → bigger stride). They move toward whichever probe position scores highest. Bounded by a hard rectangular zone derived from their `baseX`/`baseY` anchor — players cannot leave the zone even if space lies beyond it.
+The off-ball movement strategy for attacking players when their team has possession. Each tick, a player probes 8 compass directions at a distance proportional to their current space score (more space → larger probe, bigger stride). They move toward whichever probe position scores highest. Bounded by the active Tactical Zone — players cannot leave the zone even if space lies beyond it. When the team loses possession the player switches to Channel Cover or Man-Marking instead of climbing.
 
 **Tactical Zone**
-The hard rectangular bounds within which a player's gradient climb is constrained. Derived from `baseX`/`baseY` plus a role-specific radius. FWDs have a wide lateral range and deep forward range; DEFs stay tight to their line. Prevents players drifting to absurd positions while still allowing organic repositioning within their area of responsibility.
+The hard rectangular bounds within which a player's gradient climb is constrained. Role-specific and possession-aware: a wide attacker uses a larger, higher zone when their team has the ball (pushing into the attacking third) and a smaller, deeper zone when the opposition has possession (dropping to help defend). Prevents players drifting to absurd positions while still allowing organic repositioning within their area of responsibility.
 
 **Man-Marking**
 The defensive off-ball behaviour for DEFs and MIDs when the opposing team has possession. Each defending player independently runs a greedy nearest-pair assignment: rank all (defender, attacker) pairs by distance, assign closest pair first, repeat. Each defender reads off their own slot. Assigned defenders track their attacker — moving toward them to deny space. Stateless, recalculated per tick, no simulator changes required.
 
 **Covering Position**
 The fallback position for a defender with no attacker assigned (surplus defenders after man-marking). The defender holds a position between the ball and their own goal: `x` tracks the ball laterally, `y` holds the defensive line depth (`baseY`). Produces a sweeper/libero shape without explicit role assignment.
+
+**Channel Cover**
+The defensive off-ball behaviour for a wide attacker (e.g. LW, RW) when the opposition has possession. The player finds the opposition player whose `baseX` is closest to their own (the player in their channel — typically the opposing fullback or wide midfielder), then positions at the midpoint between the ball and that player. Sits in the passing lane to deny the route into the channel. Recalculated each tick, stateless. Distinct from Covering Position (which tracks the ball laterally at defensive line depth) and Man-Marking (which tracks the assigned attacker directly).
 
 **Press Role Assignment**
 When multiple forwards are pressing, each forward self-assigns its role each tick by comparing distances to the ball holder. The closest forward becomes the **primary presser** and moves directly toward the holder. All other forwards become **lane shadows** — each positions itself at the midpoint between the holder and the best available forward pass receiver (highest `pressureScore × progressionValue` among the holder's teammates ahead of the ball). Role assignment is stateless and recalculated independently by each forward each tick; no shared state or simulator changes are needed.

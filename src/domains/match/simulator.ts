@@ -1,4 +1,6 @@
+import { ChannelCoverAction } from "./actions/ChannelCoverAction";
 import { DribbleAction } from "./actions/DribbleAction";
+import { GradientClimbAction } from "./actions/GradientClimbAction";
 import { HoldAction } from "./actions/HoldAction";
 import { PassAction } from "./actions/PassAction";
 import { PressAction } from "./actions/PressAction";
@@ -8,7 +10,16 @@ import type {
 	ActionContext,
 	BallAction,
 	MatchPlayer,
+	PlayerRole,
 } from "./actions/types";
+
+
+function inferRole(position: "GK" | "DEF" | "MID" | "FWD", slotIndex: number): PlayerRole {
+	if (position === "GK") return "GK";
+	if (position === "DEF") return (["LB", "CB", "CB", "RB"] as PlayerRole[])[slotIndex] ?? "CB";
+	if (position === "MID") return (["LW", "CM", "CM", "RW"] as PlayerRole[])[slotIndex] ?? "CM";
+	return "CF";
+}
 import { kickoffPosition } from "./positions";
 import type { MatchPhase, SimFrame, XY } from "./types";
 
@@ -31,7 +42,7 @@ const INTERCEPTION_RADIUS = 0.04;
 const INTERCEPTION_BASE_CHANCE = 0.7;
 
 // Evaluated in order; first action whose canExecute returns true wins.
-const MOVEMENT_ACTIONS: Action[] = [PressAction, HoldAction];
+const MOVEMENT_ACTIONS: Action[] = [GradientClimbAction, ChannelCoverAction, PressAction, HoldAction];
 const BALL_ACTIONS: BallAction[] = [DribbleAction, PassAction];
 
 interface LivePlayer extends MatchPlayer {
@@ -89,6 +100,7 @@ export class MatchSimulator {
 			const { x, y } = kickoffPosition(pos, slotIndex, isHome);
 			return {
 				...seed,
+				role: inferRole(pos, slotIndex),
 				isHome,
 				x,
 				y,

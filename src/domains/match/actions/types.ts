@@ -1,9 +1,22 @@
 import type { MatchPhase, XY } from "../types";
 
+export type PlayerRole =
+	| "GK"
+	| "LB"
+	| "CB"
+	| "RB"
+	| "LW"
+	| "CM"
+	| "CDM"
+	| "RW"
+	| "CAM"
+	| "CF";
+
 export interface MatchPlayer {
 	id: string;
 	name: string;
 	position: "GK" | "DEF" | "MID" | "FWD";
+	role: PlayerRole;
 	isHome: boolean;
 	baseX: number;
 	baseY: number;

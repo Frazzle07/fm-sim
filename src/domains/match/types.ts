@@ -7,6 +7,7 @@ export interface SimPlayer {
 	id: string;
 	name: string;
 	position: "GK" | "DEF" | "MID" | "FWD";
+	role: string;
 	isHome: boolean;
 	x: number;
 	y: number;

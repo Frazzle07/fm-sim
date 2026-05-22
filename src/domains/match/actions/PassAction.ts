@@ -88,7 +88,7 @@ export const PassAction: BallAction = {
 			const blockers = laneDistances.filter((d) => d < LANE_BLOCK_RADIUS).length;
 			const lanePenalty = blockers * LANE_BLOCK_PENALTY;
 			const laneSafetyBonus = LANE_SAFETY_WEIGHT * laneSafety;
-			const opennessBonus = OPENNESS_WEIGHT * Math.min(openness / MARKING_RADIUS, 1);
+			const opennessBonus = OPENNESS_WEIGHT * Math.min(openness / MARKING_RADIUS, 2);
 			const score =
 				proximity +
 				positionBonus +
