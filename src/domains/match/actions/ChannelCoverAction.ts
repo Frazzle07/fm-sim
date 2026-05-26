@@ -1,3 +1,4 @@
+import { ROLE_ZONE_CONFIG } from "./roles";
 import type { Action, ActionContext, MatchPlayer } from "./types";
 
 function isOppositionInPossession(ctx: ActionContext): boolean {
@@ -24,7 +25,8 @@ function channelOpponent(
 export const ChannelCoverAction: Action = {
 	canExecute(ctx: ActionContext): boolean {
 		if (ctx.phase !== "open_play") return false;
-		if (ctx.player.role !== "LW" && ctx.player.role !== "RW") return false;
+		const role = ctx.player.role;
+		if (role !== "LW" && role !== "RW" && role !== "LB" && role !== "RB") return false;
 		if (ctx.ballHolderId === ctx.player.id) return false;
 		return isOppositionInPossession(ctx);
 	},
@@ -39,8 +41,14 @@ export const ChannelCoverAction: Action = {
 
 		// Position at midpoint between ball and the channel opponent —
 		// sitting in the passing lane to block the route into the channel.
+		// Clamp x to the player's flank zone so they don't chase across the pitch.
+		const zoneConfig = ROLE_ZONE_CONFIG[player.role];
+		const targetX = (ctx.ball.x + opponent.x) / 2;
+		const clampedX = zoneConfig
+			? Math.max(zoneConfig.xMin, Math.min(zoneConfig.xMax, targetX))
+			: targetX;
 		return {
-			x: (ctx.ball.x + opponent.x) / 2,
+			x: clampedX,
 			y: (ctx.ball.y + opponent.y) / 2,
 		};
 	},

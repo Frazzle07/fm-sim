@@ -25,28 +25,46 @@ const LANE_BLOCK_RADIUS = 0.05;
 const OPENNESS_CAP = 0.15;
 // Vertical distance at which depth alignment score falls to zero.
 const DEPTH_ALIGNMENT_MAX = 0.2;
+// Full backs must stay at least this far from their flank winger.
+const FB_WINGER_MIN_SEP = 0.18;
+// Weight of the separation penalty in spaceScore for full backs.
+const FB_SEPARATION_WEIGHT = 0.35;
+
+// Maps each full back role to its corresponding winger role on the same flank.
+const FB_WINGER_PAIR: Partial<Record<string, string>> = { LB: "LW", RB: "RW" };
 
 function spaceScore(
 	pos: { x: number; y: number },
 	opponents: MatchPlayer[],
 	ball: { x: number; y: number },
+	flankWinger: MatchPlayer | null = null,
 ): number {
-	if (opponents.length === 0) return 1;
-	const nearestOpp = nearest(pos, opponents);
-	const openness = Math.min(dist(pos, nearestOpp), OPENNESS_CAP) / OPENNESS_CAP;
-	const minLaneDist = Math.min(
-		...opponents.map((o) => distToSegment(o, ball, pos)),
-	);
-	const laneSafety = Math.min(minLaneDist / LANE_BLOCK_RADIUS, 1);
+	if (opponents.length === 0 && flankWinger === null) return 1;
+	let openness = 1;
+	let laneSafety = 1;
+	if (opponents.length > 0) {
+		const nearestOpp = nearest(pos, opponents);
+		openness = Math.min(dist(pos, nearestOpp), OPENNESS_CAP) / OPENNESS_CAP;
+		const minLaneDist = Math.min(
+			...opponents.map((o) => distToSegment(o, ball, pos)),
+		);
+		laneSafety = Math.min(minLaneDist / LANE_BLOCK_RADIUS, 1);
+	}
 	const depthAlignment = Math.max(
 		0,
 		1 - Math.abs(pos.y - ball.y) / DEPTH_ALIGNMENT_MAX,
 	);
-	return (
+	const base =
 		OPENNESS_WEIGHT * openness +
 		LANE_SAFETY_WEIGHT * laneSafety +
-		DEPTH_ALIGNMENT_WEIGHT * depthAlignment
-	);
+		DEPTH_ALIGNMENT_WEIGHT * depthAlignment;
+
+	if (flankWinger === null) return base;
+	// Penalize positions too close to the flank winger so FB and winger
+	// don't crowd the same channel. Penalty fades to zero at FB_WINGER_MIN_SEP.
+	const sep = dist(pos, flankWinger);
+	const separationScore = Math.min(sep / FB_WINGER_MIN_SEP, 1);
+	return (1 - FB_SEPARATION_WEIGHT) * base + FB_SEPARATION_WEIGHT * separationScore;
 }
 
 function clampToZone(
@@ -116,7 +134,14 @@ export const GradientClimbAction: Action = {
 		const opponents = ctx.allPlayers.filter((p) => p.isHome !== player.isHome);
 		const zone = activeZone(player, ctx.ball, config);
 
-		const currentScore = spaceScore(player, opponents, ctx.ball);
+		const wingerRole = FB_WINGER_PAIR[player.role] ?? null;
+		const flankWinger = wingerRole
+			? (ctx.allPlayers.find(
+					(p) => p.isHome === player.isHome && p.role === wingerRole,
+				) ?? null)
+			: null;
+
+		const currentScore = spaceScore(player, opponents, ctx.ball, flankWinger);
 		const probeDist =
 			MIN_PROBE_DIST +
 			(MAX_PROBE_DIST - MIN_PROBE_DIST) * Math.min(currentScore / 0.3, 1);
@@ -130,7 +155,7 @@ export const GradientClimbAction: Action = {
 				player.y + probe.dy * probeDist,
 				zone,
 			);
-			const score = spaceScore(candidate, opponents, ctx.ball);
+			const score = spaceScore(candidate, opponents, ctx.ball, flankWinger);
 			if (score > bestScore) {
 				bestScore = score;
 				bestPos = candidate;
