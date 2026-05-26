@@ -92,8 +92,8 @@ function ballDepth(ballY: number, isHome: boolean): number {
 
 // Zone y-bounds scale linearly with ball depth so the player tracks back
 // when possession is deep in their own half, and pushes forward as the ball advances.
-function activeZone(
-	player: MatchPlayer,
+export function activeZone(
+	player: { isHome: boolean },
 	ball: { x: number; y: number },
 	config: ZoneConfig,
 ): { xMin: number; xMax: number; yMin: number; yMax: number } {

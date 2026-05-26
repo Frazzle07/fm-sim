@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FM-Sim Zone Diagram</title>
+<style>
+  body { background: #111; color: #eee; font-family: monospace; padding: 24px; }
+  h1 { font-size: 16px; margin-bottom: 4px; color: #aaa; }
+  .subtitle { font-size: 12px; color: #666; margin-bottom: 24px; line-height: 1.6; }
+  .pitches { display: flex; flex-direction: column; gap: 32px; }
+  .pitch-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .pitch-label { font-size: 13px; color: #aaa; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; max-width: 900px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .swatch { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+  .note { font-size: 11px; color: #555; margin-top: 20px; max-width: 900px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>FM-Sim · Zone diagram (home team)</h1>
+<p class="subtitle">
+  Pitch orientation matches the in-game view: <strong>own goal on the left, opposition goal on the right</strong>.<br>
+  sim·x → vertical (top = left flank / LB·LW side, bottom = right flank / RB·RW side)<br>
+  sim·y → horizontal (left = own goal y=0, right = opp goal y=1)<br>
+  <br>
+  Two states shown: <strong>depth 0</strong> (ball at own goal, fully defending) and <strong>depth 1</strong> (ball at opp goal, fully attacking).
+</p>
+
+<div class="pitches">
+  <div class="pitch-wrap">
+    <div class="pitch-label">Depth 0 — ball at own goal (defending)</div>
+    <svg id="deep" width="860" height="280"></svg>
+  </div>
+  <div class="pitch-wrap">
+    <div class="pitch-label">Depth 1 — ball at opposition goal (attacking)</div>
+    <svg id="high" width="860" height="280"></svg>
+  </div>
+</div>
+
+<div class="legend" id="legend"></div>
+<p class="note" id="note"></p>
+
+<script>
+const roles = [
+  { role:"GK",  xMin:0.35, xMax:0.65, yMinDeep:0,    yMinHigh:0,    yMaxDeep:0.06, yMaxHigh:0.06 },
+  { role:"CB",  xMin:0.2,  xMax:0.8,  yMinDeep:0.05, yMinHigh:0.1,  yMaxDeep:0.3,  yMaxHigh:0.42 },
+  { role:"LB",  xMin:0.05, xMax:0.3,  yMinDeep:0.15, yMinHigh:0.22, yMaxDeep:0.45, yMaxHigh:0.55 },
+  { role:"RB",  xMin:0.7,  xMax:0.95, yMinDeep:0.15, yMinHigh:0.22, yMaxDeep:0.45, yMaxHigh:0.55 },
+  { role:"CDM", xMin:0.25, xMax:0.75, yMinDeep:0.15, yMinHigh:0.25, yMaxDeep:0.42, yMaxHigh:0.55 },
+  { role:"CM",  xMin:0.25, xMax:0.75, yMinDeep:0.2,  yMinHigh:0.38, yMaxDeep:0.55, yMaxHigh:0.75 },
+  { role:"LW",  xMin:0.0,  xMax:0.3,  yMinDeep:0.25, yMinHigh:0.45, yMaxDeep:0.55, yMaxHigh:0.92 },
+  { role:"RW",  xMin:0.7,  xMax:1.0,  yMinDeep:0.25, yMinHigh:0.45, yMaxDeep:0.55, yMaxHigh:0.92 },
+  { role:"CAM", xMin:0.25, xMax:0.75, yMinDeep:0.28, yMinHigh:0.45, yMaxDeep:0.6,  yMaxHigh:0.82 },
+  { role:"CF",  xMin:0.25, xMax:0.75, yMinDeep:0.3,  yMinHigh:0.55, yMaxDeep:0.65, yMaxHigh:0.92 },
+];
+
+const COLORS = {
+  GK:  { fill:"rgba(255,220,50,0.18)",  stroke:"rgba(255,220,50,0.75)",  label:"#ffd832" },
+  LB:  { fill:"rgba(50,180,255,0.18)",  stroke:"rgba(50,180,255,0.75)",  label:"#32b4ff" },
+  CB:  { fill:"rgba(50,100,255,0.18)",  stroke:"rgba(50,100,255,0.75)",  label:"#6484ff" },
+  RB:  { fill:"rgba(50,180,255,0.18)",  stroke:"rgba(50,180,255,0.75)",  label:"#32b4ff" },
+  CDM: { fill:"rgba(80,200,80,0.18)",   stroke:"rgba(80,200,80,0.75)",   label:"#50c850" },
+  CM:  { fill:"rgba(80,255,120,0.18)",  stroke:"rgba(80,255,120,0.75)",  label:"#50ff78" },
+  LW:  { fill:"rgba(255,100,50,0.18)",  stroke:"rgba(255,100,50,0.75)",  label:"#ff6432" },
+  RW:  { fill:"rgba(255,100,50,0.18)",  stroke:"rgba(255,100,50,0.75)",  label:"#ff6432" },
+  CAM: { fill:"rgba(255,160,50,0.18)",  stroke:"rgba(255,160,50,0.75)",  label:"#ffa032" },
+  CF:  { fill:"rgba(255,50,50,0.18)",   stroke:"rgba(255,50,50,0.75)",   label:"#ff3232" },
+};
+
+// SVG dimensions
+const SVG_W = 860, SVG_H = 280;
+const PAD_L = 60, PAD_R = 20, PAD_T = 20, PAD_B = 20;
+const PW = SVG_W - PAD_L - PAD_R;   // playable width (sim y → screen x)
+const PH = SVG_H - PAD_T - PAD_B;   // playable height (sim x → screen y)
+
+// sim y (0=own goal, 1=opp goal) → screen x (left to right)
+function sx(simY) { return PAD_L + simY * PW; }
+// sim x (0=top flank, 1=bottom flank) → screen y (top to bottom)
+function sy(simX) { return PAD_T + simX * PH; }
+
+function zoneAt(r, depth) {
+  return {
+    yMin: r.yMinDeep + (r.yMinHigh - r.yMinDeep) * depth,
+    yMax: r.yMaxDeep + (r.yMaxHigh - r.yMaxDeep) * depth,
+  };
+}
+
+function drawPitch(svgId, depth) {
+  const svg = document.getElementById(svgId);
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  // Background
+  svg.appendChild(el("rect", { width:SVG_W, height:SVG_H, fill:"#1a6b2f", rx:4 }));
+
+  // Vertical stripes
+  for (let i = 0; i < 10; i++) {
+    if (i % 2 === 0) {
+      svg.appendChild(el("rect", {
+        x: PAD_L + i * PW / 10, y: PAD_T,
+        width: PW/10, height: PH,
+        fill:"rgba(255,255,255,0.025)"
+      }));
+    }
+  }
+
+  // Touchlines
+  svg.appendChild(el("rect", { x:PAD_L, y:PAD_T, width:PW, height:PH,
+    fill:"none", stroke:"rgba(255,255,255,0.5)", "stroke-width":1.5 }));
+
+  // Halfway line (sim y=0.5 → vertical line on screen)
+  const midX = sx(0.5);
+  svg.appendChild(el("line", { x1:midX, y1:PAD_T, x2:midX, y2:PAD_T+PH,
+    stroke:"rgba(255,255,255,0.35)", "stroke-width":1 }));
+  svg.appendChild(el("circle", { cx:midX, cy:PAD_T+PH/2, r:Math.min(PH*0.18, 40),
+    fill:"none", stroke:"rgba(255,255,255,0.2)", "stroke-width":1 }));
+
+  // Penalty areas — own (left) and opp (right)
+  const paDepth = PW * 0.14;
+  const paH = PH * 0.42;
+  const paY = PAD_T + PH/2 - paH/2;
+  svg.appendChild(el("rect", { x:PAD_L, y:paY, width:paDepth, height:paH,
+    fill:"none", stroke:"rgba(255,255,255,0.25)", "stroke-width":1 }));
+  svg.appendChild(el("rect", { x:PAD_L+PW-paDepth, y:paY, width:paDepth, height:paH,
+    fill:"none", stroke:"rgba(255,255,255,0.25)", "stroke-width":1 }));
+
+  // Goal mouths
+  const gmH = PH * 0.15, gmY = PAD_T + PH/2 - gmH/2;
+  svg.appendChild(el("rect", { x:PAD_L-6, y:gmY, width:8, height:gmH,
+    fill:"none", stroke:"rgba(255,255,255,0.5)", "stroke-width":1.5 }));
+  svg.appendChild(el("rect", { x:PAD_L+PW-2, y:gmY, width:8, height:gmH,
+    fill:"none", stroke:"rgba(255,255,255,0.5)", "stroke-width":1.5 }));
+
+  // Third lines
+  for (const t of [1/3, 2/3]) {
+    const tx = sx(t);
+    svg.appendChild(el("line", { x1:tx, y1:PAD_T, x2:tx, y2:PAD_T+PH,
+      stroke:"rgba(255,255,255,0.08)", "stroke-width":1, "stroke-dasharray":"4 4" }));
+  }
+
+  // Axis labels (left side)
+  svg.appendChild(el("text", { x:PAD_L-4, y:PAD_T-6,
+    "text-anchor":"end", fill:"rgba(255,255,255,0.3)", "font-size":8 }, "OWN GOAL  y=0"));
+  svg.appendChild(el("text", { x:PAD_L+PW+4, y:PAD_T-6,
+    "text-anchor":"start", fill:"rgba(255,255,255,0.3)", "font-size":8 }, "y=1  OPP GOAL"));
+  svg.appendChild(el("text", { x:6, y:PAD_T+4,
+    "text-anchor":"start", fill:"rgba(255,255,255,0.25)", "font-size":8 }, "x=0 (LB/LW flank)"));
+  svg.appendChild(el("text", { x:6, y:PAD_T+PH,
+    "text-anchor":"start", fill:"rgba(255,255,255,0.25)", "font-size":8 }, "x=1 (RB/RW flank)"));
+
+  // Draw zones — sim y→screen x, sim x→screen y
+  for (const r of roles) {
+    const c = COLORS[r.role];
+    const z = zoneAt(r, depth);
+
+    // zone rect in screen coords
+    const rx = sx(z.yMin);
+    const ry = sy(r.xMin);
+    const rw = sx(z.yMax) - sx(z.yMin);
+    const rh = sy(r.xMax) - sy(r.xMin);
+
+    svg.appendChild(el("rect", { x:rx, y:ry, width:rw, height:rh,
+      fill:c.fill, stroke:c.stroke,
+      "stroke-width":1.5, "stroke-dasharray":"4 3", rx:3 }));
+
+    // Label
+    svg.appendChild(el("text", {
+      x: rx + rw/2, y: ry + rh/2 + 4,
+      "text-anchor":"middle", fill:c.label,
+      "font-size":10, "font-weight":"bold",
+      "paint-order":"stroke", stroke:"rgba(0,0,0,0.8)", "stroke-width":3
+    }, r.role));
+  }
+
+  // Ball dot
+  const ballScreenX = sx(depth);
+  const ballScreenY = sy(0.5);
+  svg.appendChild(el("circle", { cx:ballScreenX, cy:ballScreenY, r:6,
+    fill:"white", stroke:"#333", "stroke-width":1.5 }));
+  svg.appendChild(el("text", { x:ballScreenX, y:ballScreenY - 9,
+    "text-anchor":"middle", fill:"white", "font-size":8 }, "ball"));
+}
+
+drawPitch("deep", 0);
+drawPitch("high", 1);
+
+// Legend
+const legendEl = document.getElementById("legend");
+const seen = new Set();
+for (const r of roles) {
+  if (seen.has(r.role)) continue;
+  seen.add(r.role);
+  const c = COLORS[r.role];
+  const item = document.createElement("div");
+  item.className = "legend-item";
+  item.innerHTML = `<div class="swatch" style="background:${c.fill};border:1.5px solid ${c.stroke}"></div><span style="color:${c.label}">${r.role}</span>`;
+  legendEl.appendChild(item);
+}
+
+document.getElementById("note").innerHTML = `
+  <strong>Orientation matches the in-game renderer</strong> (simToScreen: sim·y → px·x, sim·x → px·y).<br>
+  Horizontal axis = depth (own goal → opp goal). Vertical axis = flank (top = LB/LW side, bottom = RB/RW side).<br>
+  Zone y-bounds interpolate linearly with ball depth between the two states above.
+`;
+</script>
+</body>
+</html>

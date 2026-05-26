@@ -1,3 +1,4 @@
+import { activeZone } from "./GradientClimbAction";
 import { ROLE_ZONE_CONFIG } from "./roles";
 import type { Action, ActionContext, MatchPlayer } from "./types";
 
@@ -26,7 +27,8 @@ export const ChannelCoverAction: Action = {
 	canExecute(ctx: ActionContext): boolean {
 		if (ctx.phase !== "open_play") return false;
 		const role = ctx.player.role;
-		if (role !== "LW" && role !== "RW" && role !== "LB" && role !== "RB") return false;
+		if (role !== "LW" && role !== "RW" && role !== "LB" && role !== "RB")
+			return false;
 		if (ctx.ballHolderId === ctx.player.id) return false;
 		return isOppositionInPossession(ctx);
 	},
@@ -41,15 +43,16 @@ export const ChannelCoverAction: Action = {
 
 		// Position at midpoint between ball and the channel opponent —
 		// sitting in the passing lane to block the route into the channel.
-		// Clamp x to the player's flank zone so they don't chase across the pitch.
+		// Clamp both x and y to the player's active zone so fullbacks don't
+		// chase deep into the opponent's half when defending.
 		const zoneConfig = ROLE_ZONE_CONFIG[player.role];
 		const targetX = (ctx.ball.x + opponent.x) / 2;
-		const clampedX = zoneConfig
-			? Math.max(zoneConfig.xMin, Math.min(zoneConfig.xMax, targetX))
-			: targetX;
+		const targetY = (ctx.ball.y + opponent.y) / 2;
+		if (!zoneConfig) return { x: targetX, y: targetY };
+		const zone = activeZone(player, ctx.ball, zoneConfig);
 		return {
-			x: clampedX,
-			y: (ctx.ball.y + opponent.y) / 2,
+			x: Math.max(zone.xMin, Math.min(zone.xMax, targetX)),
+			y: Math.max(zone.yMin, Math.min(zone.yMax, targetY)),
 		};
 	},
 };

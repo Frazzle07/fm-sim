@@ -29,6 +29,7 @@ export default function MatchDebugPage() {
 	const [key, setKey] = useState(0);
 	const [frame, setFrame] = useState<SimFrame | null>(null);
 	const [showLanes, setShowLanes] = useState(false);
+	const [showZones, setShowZones] = useState(false);
 
 	const homePlayers = useMemo(() => makePlayers(true, seed), [seed]);
 	const awayPlayers = useMemo(() => makePlayers(false, seed), [seed]);
@@ -57,6 +58,7 @@ export default function MatchDebugPage() {
 				homeColor={HOME_COLOR}
 				awayColor={AWAY_COLOR}
 				showLanes={showLanes}
+				showZones={showZones}
 				onFrame={setFrame}
 			/>
 
@@ -108,6 +110,23 @@ export default function MatchDebugPage() {
 					}}
 				>
 					{showLanes ? "Lanes: on" : "Lanes: off"}
+				</button>
+
+				<button
+					type="button"
+					onClick={() => setShowZones((v) => !v)}
+					style={{
+						padding: "6px 20px",
+						borderRadius: 8,
+						border: "1px solid rgba(255,255,255,0.2)",
+						background: showZones ? "rgba(255,160,50,0.2)" : "transparent",
+						color: "#fff",
+						fontWeight: 700,
+						fontSize: 13,
+						cursor: "pointer",
+					}}
+				>
+					{showZones ? "Zones: on" : "Zones: off"}
 				</button>
 
 				{frame && (
