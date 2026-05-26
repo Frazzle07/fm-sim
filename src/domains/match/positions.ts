@@ -18,10 +18,10 @@ const HOME_KICKOFF: Record<Position, XY[]> = {
 		{ x: 0.6, y: 0.33 },
 		{ x: 0.8, y: 0.33 },
 	],
-	// FWD[0] takes the kick at the centre spot; FWD[1] just behind.
+	// FWD[0] (CF) takes the kick at the centre spot; FWD[1] (SS) spreads left.
 	FWD: [
-		{ x: 0.5, y: 0.49 },
-		{ x: 0.5, y: 0.40 },
+		{ x: 0.55, y: 0.49 },
+		{ x: 0.35, y: 0.42 },
 	],
 };
 
@@ -41,10 +41,10 @@ const AWAY_KICKOFF: Record<Position, XY[]> = {
 		{ x: 0.6, y: 0.67 },
 		{ x: 0.8, y: 0.67 },
 	],
-	// Away striker waits just outside the centre circle.
+	// FWD[0] (CF) waits outside centre circle; FWD[1] (SS) spreads left.
 	FWD: [
-		{ x: 0.5, y: 0.62 },
-		{ x: 0.5, y: 0.70 },
+		{ x: 0.45, y: 0.51 },
+		{ x: 0.65, y: 0.58 },
 	],
 };
 

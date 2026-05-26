@@ -4,56 +4,178 @@
 <meta charset="UTF-8">
 <title>FM-Sim Zone Diagram</title>
 <style>
-  body { background: #111; color: #eee; font-family: monospace; padding: 24px; }
+  * { box-sizing: border-box; }
+  body { background: #111; color: #eee; font-family: monospace; padding: 24px; margin: 0; }
   h1 { font-size: 16px; margin-bottom: 4px; color: #aaa; }
-  .subtitle { font-size: 12px; color: #666; margin-bottom: 24px; line-height: 1.6; }
-  .pitches { display: flex; flex-direction: column; gap: 32px; }
-  .pitch-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-  .pitch-label { font-size: 13px; color: #aaa; }
-  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; max-width: 900px; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-  .swatch { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
-  .note { font-size: 11px; color: #555; margin-top: 20px; max-width: 900px; line-height: 1.6; }
+  .subtitle { font-size: 11px; color: #555; margin-bottom: 16px; line-height: 1.6; }
+  .layout { display: flex; gap: 24px; align-items: flex-start; }
+  .pitches-col { display: flex; flex-direction: column; gap: 24px; flex-shrink: 0; }
+  .pitch-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .pitch-label { font-size: 12px; color: #888; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; max-width: 860px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; user-select: none; }
+  .legend-item.dimmed { opacity: 0.25; }
+  .swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+
+  /* Config panel */
+  .config-panel {
+    flex: 1;
+    min-width: 260px;
+    max-width: 340px;
+    position: sticky;
+    top: 24px;
+  }
+  .config-panel h2 { font-size: 12px; color: #888; margin: 0 0 10px; }
+  .config-role { margin-bottom: 12px; }
+  .config-role-header {
+    font-size: 11px;
+    font-weight: bold;
+    margin-bottom: 4px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .config-role-header:hover { opacity: 0.8; }
+  .config-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+  .config-field { font-size: 10px; color: #666; }
+  .config-field span { color: #ccc; }
+  .config-field.changed span { color: #7fff90; }
+
+  .export-box {
+    margin-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding-top: 12px;
+  }
+  .export-box h2 { font-size: 12px; color: #888; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  .copy-btn {
+    font-family: monospace;
+    font-size: 10px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #aaa;
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); color: #eee; }
+  pre#export-code {
+    font-size: 9.5px;
+    line-height: 1.55;
+    color: #7baaff;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 4px;
+    padding: 10px;
+    margin: 0;
+    overflow-x: auto;
+    max-height: 420px;
+    overflow-y: auto;
+    white-space: pre;
+  }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .toggle-group { display: flex; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; overflow: hidden; }
+  .toggle-btn {
+    background: rgba(255,255,255,0.05); color: #aaa;
+    border: none; border-right: 1px solid rgba(255,255,255,0.2);
+    padding: 5px 12px; font-family: monospace; font-size: 11px; cursor: pointer;
+  }
+  .toggle-btn:last-child { border-right: none; }
+  .toggle-btn.active { background: rgba(255,255,255,0.18); color: #eee; }
+  .reset-btn {
+    font-family: monospace; font-size: 11px;
+    background: rgba(255,80,80,0.12); color: #ff8080;
+    border: 1px solid rgba(255,80,80,0.3); border-radius: 5px;
+    padding: 5px 12px; cursor: pointer;
+  }
+  .reset-btn:hover { background: rgba(255,80,80,0.22); }
+
+  #tooltip {
+    position: fixed; pointer-events: none; display: none;
+    background: rgba(0,0,0,0.88); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 5px; padding: 7px 11px; font-size: 10px; line-height: 1.8;
+    color: #eee; z-index: 200; white-space: nowrap;
+  }
+  #tooltip .tip-role { font-size: 12px; font-weight: bold; margin-bottom: 1px; }
+
+  .drag-hint { font-size: 10px; color: #555; margin-top: 6px; }
 </style>
 </head>
 <body>
 
-<h1>FM-Sim · Zone diagram (home team)</h1>
+<h1>FM-Sim · Zone editor</h1>
 <p class="subtitle">
-  Pitch orientation matches the in-game view: <strong>own goal on the left, opposition goal on the right</strong>.<br>
-  sim·x → vertical (top = left flank / LB·LW side, bottom = right flank / RB·RW side)<br>
-  sim·y → horizontal (left = own goal y=0, right = opp goal y=1)<br>
-  <br>
-  Two states shown: <strong>depth 0</strong> (ball at own goal, fully defending) and <strong>depth 1</strong> (ball at opp goal, fully attacking).
+  Own goal left (y=0) → opp goal right (y=1) · top flank = LB/LW (x=0) · bottom = RB/RW (x=1)<br>
+  <strong>Drag zone edges</strong> to resize. Deep pitch edits defending values; High pitch edits attacking values.<br>
+  Top/bottom edges (x) are shared and edit both pitches together.
 </p>
 
-<div class="pitches">
-  <div class="pitch-wrap">
-    <div class="pitch-label">Depth 0 — ball at own goal (defending)</div>
-    <svg id="deep" width="860" height="280"></svg>
+<div class="controls">
+  <div class="toggle-group">
+    <button class="toggle-btn active" id="btn-edit"   onclick="setMode('edit')">Edit</button>
+    <button class="toggle-btn"        id="btn-diff"   onclick="setMode('diff')">Diff vs original</button>
   </div>
-  <div class="pitch-wrap">
-    <div class="pitch-label">Depth 1 — ball at opposition goal (attacking)</div>
-    <svg id="high" width="860" height="280"></svg>
+  <button class="reset-btn" onclick="resetAll()">Reset all</button>
+</div>
+
+<div class="layout">
+  <div class="pitches-col">
+    <div class="pitch-wrap">
+      <div class="pitch-label">Depth 0 — defending (ball at own goal) — drag edges to set <em>Deep</em> y-bounds</div>
+      <svg id="deep" width="860" height="260"></svg>
+    </div>
+    <div class="pitch-wrap">
+      <div class="pitch-label">Depth 1 — attacking (ball at opp goal) — drag edges to set <em>High</em> y-bounds</div>
+      <svg id="high" width="860" height="260"></svg>
+    </div>
+    <div class="drag-hint">Drag zone edges (handles appear on hover). Left/right edges = y-bounds for that depth. Top/bottom edges = x-bounds (shared).</div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="config-panel">
+    <h2>Live values</h2>
+    <div id="config-values"></div>
+    <div class="export-box">
+      <h2>Export <button class="copy-btn" onclick="copyExport()">copy</button></h2>
+      <pre id="export-code"></pre>
+    </div>
   </div>
 </div>
 
-<div class="legend" id="legend"></div>
-<p class="note" id="note"></p>
+<div id="tooltip"></div>
 
 <script>
-const roles = [
-  { role:"GK",  xMin:0.35, xMax:0.65, yMinDeep:0,    yMinHigh:0,    yMaxDeep:0.06, yMaxHigh:0.06 },
-  { role:"CB",  xMin:0.2,  xMax:0.8,  yMinDeep:0.05, yMinHigh:0.1,  yMaxDeep:0.3,  yMaxHigh:0.42 },
-  { role:"LB",  xMin:0.05, xMax:0.3,  yMinDeep:0.15, yMinHigh:0.22, yMaxDeep:0.45, yMaxHigh:0.55 },
-  { role:"RB",  xMin:0.7,  xMax:0.95, yMinDeep:0.15, yMinHigh:0.22, yMaxDeep:0.45, yMaxHigh:0.55 },
-  { role:"CDM", xMin:0.25, xMax:0.75, yMinDeep:0.15, yMinHigh:0.25, yMaxDeep:0.42, yMaxHigh:0.55 },
-  { role:"CM",  xMin:0.25, xMax:0.75, yMinDeep:0.2,  yMinHigh:0.38, yMaxDeep:0.55, yMaxHigh:0.75 },
-  { role:"LW",  xMin:0.0,  xMax:0.3,  yMinDeep:0.25, yMinHigh:0.45, yMaxDeep:0.55, yMaxHigh:0.92 },
-  { role:"RW",  xMin:0.7,  xMax:1.0,  yMinDeep:0.25, yMinHigh:0.45, yMaxDeep:0.55, yMaxHigh:0.92 },
-  { role:"CAM", xMin:0.25, xMax:0.75, yMinDeep:0.28, yMinHigh:0.45, yMaxDeep:0.6,  yMaxHigh:0.82 },
-  { role:"CF",  xMin:0.25, xMax:0.75, yMinDeep:0.3,  yMinHigh:0.55, yMaxDeep:0.65, yMaxHigh:0.92 },
+// ─── Zone data (mutable working copy) ───────────────────────────────────────
+
+const ORIGINAL = [
+  { role:"GK",  xMin:0.35, xMax:0.65, yMinDeep:0.0,  yMinHigh:0.0,  yMaxDeep:0.06, yMaxHigh:0.06 },
+  { role:"CB",  xMin:0.2,  xMax:0.8,  yMinDeep:0.05, yMinHigh:0.17, yMaxDeep:0.3,  yMaxHigh:0.42 },
+  { role:"LB",  xMin:0.0,  xMax:0.3,  yMinDeep:0.05, yMinHigh:0.22, yMaxDeep:0.35, yMaxHigh:0.65 },
+  { role:"RB",  xMin:0.7,  xMax:1.0,  yMinDeep:0.05, yMinHigh:0.22, yMaxDeep:0.35, yMaxHigh:0.65 },
+  { role:"CDM", xMin:0.18, xMax:0.81, yMinDeep:0.11, yMinHigh:0.25, yMaxDeep:0.38, yMaxHigh:0.55 },
+  { role:"CM",  xMin:0.25, xMax:0.75, yMinDeep:0.2,  yMinHigh:0.38, yMaxDeep:0.54, yMaxHigh:0.75 },
+  { role:"LW",  xMin:0.0,  xMax:0.3,  yMinDeep:0.14, yMinHigh:0.45, yMaxDeep:0.55, yMaxHigh:1.0  },
+  { role:"RW",  xMin:0.7,  xMax:1.0,  yMinDeep:0.14, yMinHigh:0.45, yMaxDeep:0.55, yMaxHigh:1.0  },
+  { role:"CAM", xMin:0.25, xMax:0.75, yMinDeep:0.28, yMinHigh:0.45, yMaxDeep:0.59, yMaxHigh:0.82 },
+  { role:"CF",  xMin:0.25, xMax:0.75, yMinDeep:0.42, yMinHigh:0.55, yMaxDeep:0.58, yMaxHigh:1.0  },
+  { role:"SS",  xMin:0.2,  xMax:0.8,  yMinDeep:0.41, yMinHigh:0.45, yMaxDeep:0.6,  yMaxHigh:0.95 },
 ];
+
+// Deep-copy for editing
+let zones = ORIGINAL.map(r => ({ ...r }));
+
+function resetAll() {
+  zones = ORIGINAL.map(r => ({ ...r }));
+  redrawAll();
+  updatePanel();
+}
+
+// ─── Colours ────────────────────────────────────────────────────────────────
 
 const COLORS = {
   GK:  { fill:"rgba(255,220,50,0.18)",  stroke:"rgba(255,220,50,0.75)",  label:"#ffd832" },
@@ -66,18 +188,20 @@ const COLORS = {
   RW:  { fill:"rgba(255,100,50,0.18)",  stroke:"rgba(255,100,50,0.75)",  label:"#ff6432" },
   CAM: { fill:"rgba(255,160,50,0.18)",  stroke:"rgba(255,160,50,0.75)",  label:"#ffa032" },
   CF:  { fill:"rgba(255,50,50,0.18)",   stroke:"rgba(255,50,50,0.75)",   label:"#ff3232" },
+  SS:  { fill:"rgba(255,50,150,0.18)",  stroke:"rgba(255,50,150,0.75)",  label:"#ff3296" },
 };
 
-// SVG dimensions
-const SVG_W = 860, SVG_H = 280;
-const PAD_L = 60, PAD_R = 20, PAD_T = 20, PAD_B = 20;
-const PW = SVG_W - PAD_L - PAD_R;   // playable width (sim y → screen x)
-const PH = SVG_H - PAD_T - PAD_B;   // playable height (sim x → screen y)
+// ─── Layout ──────────────────────────────────────────────────────────────────
 
-// sim y (0=own goal, 1=opp goal) → screen x (left to right)
+const SVG_W = 860, SVG_H = 260;
+const PAD_L = 60, PAD_R = 20, PAD_T = 16, PAD_B = 16;
+const PW = SVG_W - PAD_L - PAD_R;
+const PH = SVG_H - PAD_T - PAD_B;
+
 function sx(simY) { return PAD_L + simY * PW; }
-// sim x (0=top flank, 1=bottom flank) → screen y (top to bottom)
 function sy(simX) { return PAD_T + simX * PH; }
+function simY(px) { return Math.max(0, Math.min(1, (px - PAD_L) / PW)); }
+function simX(py) { return Math.max(0, Math.min(1, (py - PAD_T) / PH)); }
 
 function zoneAt(r, depth) {
   return {
@@ -86,128 +210,367 @@ function zoneAt(r, depth) {
   };
 }
 
-function drawPitch(svgId, depth) {
-  const svg = document.getElementById(svgId);
-  const NS = "http://www.w3.org/2000/svg";
-  function el(tag, attrs, text) {
-    const e = document.createElementNS(NS, tag);
-    for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
-    if (text !== undefined) e.textContent = text;
-    return e;
+// ─── State ───────────────────────────────────────────────────────────────────
+
+let mode = "edit";
+let hoveredRole = null;
+let lockedRole  = null;
+
+// Drag state
+let drag = null; // { role, edge, svgId, depth, startVal }
+
+// ─── Drag handling ───────────────────────────────────────────────────────────
+
+const EDGE_HIT = 8; // px tolerance for edge hit
+
+function edgeAtPoint(r, svgId, depth, px, py) {
+  const z = zoneAt(r, depth);
+  const rx = sx(z.yMin), rw = sx(z.yMax) - sx(z.yMin);
+  const ry = sy(r.xMin), rh = sy(r.xMax) - sy(r.xMin);
+  const edges = [];
+  if (Math.abs(px - rx) < EDGE_HIT        && py >= ry && py <= ry+rh) edges.push("yMin");
+  if (Math.abs(px - (rx+rw)) < EDGE_HIT   && py >= ry && py <= ry+rh) edges.push("yMax");
+  if (Math.abs(py - ry) < EDGE_HIT        && px >= rx && px <= rx+rw) edges.push("xMin");
+  if (Math.abs(py - (ry+rh)) < EDGE_HIT   && px >= rx && px <= rx+rw) edges.push("xMax");
+  return edges[0] ?? null;
+}
+
+function cursorForEdge(edge) {
+  if (edge === "yMin" || edge === "yMax") return "ew-resize";
+  if (edge === "xMin" || edge === "xMax") return "ns-resize";
+  return "default";
+}
+
+function applyDrag(r, edge, depth, rawVal) {
+  const v = Math.round(rawVal * 100) / 100; // snap to 0.01
+  if (edge === "yMin") {
+    if (depth === 0) r.yMinDeep = Math.min(v, r.yMaxDeep - 0.02);
+    else             r.yMinHigh = Math.min(v, r.yMaxHigh - 0.02);
+  } else if (edge === "yMax") {
+    if (depth === 0) r.yMaxDeep = Math.max(v, r.yMinDeep + 0.02);
+    else             r.yMaxHigh = Math.max(v, r.yMinHigh + 0.02);
+  } else if (edge === "xMin") {
+    r.xMin = Math.min(v, r.xMax - 0.02);
+  } else if (edge === "xMax") {
+    r.xMax = Math.max(v, r.xMin + 0.02);
   }
+}
 
-  // Background
-  svg.appendChild(el("rect", { width:SVG_W, height:SVG_H, fill:"#1a6b2f", rx:4 }));
+function svgPoint(svgEl, clientX, clientY) {
+  const rect = svgEl.getBoundingClientRect();
+  return { px: clientX - rect.left, py: clientY - rect.top };
+}
 
-  // Vertical stripes
-  for (let i = 0; i < 10; i++) {
-    if (i % 2 === 0) {
-      svg.appendChild(el("rect", {
-        x: PAD_L + i * PW / 10, y: PAD_T,
-        width: PW/10, height: PH,
-        fill:"rgba(255,255,255,0.025)"
-      }));
+function setupDragListeners(svgEl, depth) {
+  svgEl.addEventListener("mousemove", (e) => {
+    if (drag) {
+      const { px, py } = svgPoint(svgEl, e.clientX, e.clientY);
+      const rawVal = drag.edge === "xMin" || drag.edge === "xMax" ? simX(py) : simY(px);
+      const r = zones.find(z => z.role === drag.role);
+      applyDrag(r, drag.edge, drag.depth, rawVal);
+      redrawAll();
+      updatePanel();
+      return;
+    }
+
+    // Hover: find an edge under cursor
+    const { px, py } = svgPoint(svgEl, e.clientX, e.clientY);
+    let found = null;
+    for (const r of zones) {
+      const edge = edgeAtPoint(r, svgEl.id, depth, px, py);
+      if (edge) { found = { role: r.role, edge }; break; }
+    }
+    svgEl.style.cursor = found ? cursorForEdge(found.edge) : "default";
+    if (!lockedRole) {
+      setHovered(found ? found.role : null);
+      if (found) showTooltipForRole(found.role, e.clientX, e.clientY);
+      else hideTooltip();
+    }
+  });
+
+  svgEl.addEventListener("mousedown", (e) => {
+    const { px, py } = svgPoint(svgEl, e.clientX, e.clientY);
+    for (const r of zones) {
+      const edge = edgeAtPoint(r, svgEl.id, depth, px, py);
+      if (edge) {
+        drag = { role: r.role, edge, depth };
+        e.preventDefault();
+        hideTooltip();
+        return;
+      }
+    }
+  });
+
+  svgEl.addEventListener("mouseleave", () => {
+    if (!drag && !lockedRole) { setHovered(null); hideTooltip(); }
+    svgEl.style.cursor = "default";
+  });
+}
+
+document.addEventListener("mouseup", () => { drag = null; });
+
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
+
+const tooltip = document.getElementById("tooltip");
+function fmt(n) { return n.toFixed(2); }
+
+function showTooltipForRole(role, clientX, clientY) {
+  const r = zones.find(z => z.role === role);
+  const orig = ORIGINAL.find(z => z.role === role);
+  const c = COLORS[role];
+  function fmtDiff(label, cur, org) {
+    const changed = Math.abs(cur - org) > 0.005;
+    const col = changed ? (cur < org ? "#ff7070" : "#70ff90") : "#888";
+    return `<div style="color:${col}">${label}: ${fmt(cur)}${changed ? ` (was ${fmt(org)})` : ""}</div>`;
+  }
+  let html = `<div class="tip-role" style="color:${c.label}">${role}</div>`;
+  html += fmtDiff("xMin",     r.xMin,     orig.xMin);
+  html += fmtDiff("xMax",     r.xMax,     orig.xMax);
+  html += fmtDiff("yMinDeep", r.yMinDeep, orig.yMinDeep);
+  html += fmtDiff("yMaxDeep", r.yMaxDeep, orig.yMaxDeep);
+  html += fmtDiff("yMinHigh", r.yMinHigh, orig.yMinHigh);
+  html += fmtDiff("yMaxHigh", r.yMaxHigh, orig.yMaxHigh);
+  tooltip.innerHTML = html;
+  tooltip.style.display = "block";
+  const tw = tooltip.offsetWidth, th = tooltip.offsetHeight, m = 14;
+  let tx = clientX + m, ty = clientY + m;
+  if (tx + tw > window.innerWidth - 8) tx = clientX - tw - m;
+  if (ty + th > window.innerHeight - 8) ty = clientY - th - m;
+  tooltip.style.left = tx + "px";
+  tooltip.style.top  = ty + "px";
+}
+
+function hideTooltip() { tooltip.style.display = "none"; }
+
+// ─── Highlight ───────────────────────────────────────────────────────────────
+
+// svgElements[svgId][role] = { rect, label, handles[] }
+const svgElements = { deep: {}, high: {} };
+
+function setHovered(role) {
+  hoveredRole = role;
+  for (const svgId of ["deep","high"]) {
+    for (const [r, els] of Object.entries(svgElements[svgId])) {
+      const c = COLORS[r];
+      const active = role === null || r === role;
+      const highlight = r === role;
+      if (els.rect) {
+        els.rect.setAttribute("fill",         active ? c.fill   : "rgba(255,255,255,0.02)");
+        els.rect.setAttribute("stroke",       active ? c.stroke : "rgba(255,255,255,0.08)");
+        els.rect.setAttribute("stroke-width", highlight ? "2.5" : (active ? "1.5" : "1"));
+      }
+      if (els.label) els.label.setAttribute("opacity", active ? "1" : "0.1");
+      for (const h of (els.handles || [])) {
+        h.setAttribute("opacity", (active && mode === "edit") ? "1" : "0");
+      }
     }
   }
+  document.querySelectorAll(".legend-item").forEach(item => {
+    item.classList.toggle("dimmed", role !== null && item.dataset.role !== role);
+  });
+}
 
-  // Touchlines
-  svg.appendChild(el("rect", { x:PAD_L, y:PAD_T, width:PW, height:PH,
+// ─── Mode ────────────────────────────────────────────────────────────────────
+
+function setMode(m) {
+  mode = m;
+  ["edit","diff"].forEach(id => {
+    document.getElementById("btn-" + id).classList.toggle("active", id === m);
+  });
+  redrawAll();
+}
+
+// ─── Drawing ─────────────────────────────────────────────────────────────────
+
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function drawPitchBase(svgEl) {
+  svgEl.innerHTML = "";
+  svgEl.appendChild(el("rect", { width:SVG_W, height:SVG_H, fill:"#1a6b2f", rx:4 }));
+  for (let i = 0; i < 10; i++) {
+    if (i % 2 === 0) svgEl.appendChild(el("rect", {
+      x: PAD_L + i*PW/10, y:PAD_T, width:PW/10, height:PH,
+      fill:"rgba(255,255,255,0.025)"
+    }));
+  }
+  svgEl.appendChild(el("rect", { x:PAD_L, y:PAD_T, width:PW, height:PH,
     fill:"none", stroke:"rgba(255,255,255,0.5)", "stroke-width":1.5 }));
-
-  // Halfway line (sim y=0.5 → vertical line on screen)
   const midX = sx(0.5);
-  svg.appendChild(el("line", { x1:midX, y1:PAD_T, x2:midX, y2:PAD_T+PH,
+  svgEl.appendChild(el("line", { x1:midX, y1:PAD_T, x2:midX, y2:PAD_T+PH,
     stroke:"rgba(255,255,255,0.35)", "stroke-width":1 }));
-  svg.appendChild(el("circle", { cx:midX, cy:PAD_T+PH/2, r:Math.min(PH*0.18, 40),
+  svgEl.appendChild(el("circle", { cx:midX, cy:PAD_T+PH/2, r:Math.min(PH*0.18,36),
     fill:"none", stroke:"rgba(255,255,255,0.2)", "stroke-width":1 }));
-
-  // Penalty areas — own (left) and opp (right)
-  const paDepth = PW * 0.14;
-  const paH = PH * 0.42;
-  const paY = PAD_T + PH/2 - paH/2;
-  svg.appendChild(el("rect", { x:PAD_L, y:paY, width:paDepth, height:paH,
+  const paDepth = PW*0.14, paH = PH*0.42, paY = PAD_T+PH/2-paH/2;
+  svgEl.appendChild(el("rect", { x:PAD_L, y:paY, width:paDepth, height:paH,
     fill:"none", stroke:"rgba(255,255,255,0.25)", "stroke-width":1 }));
-  svg.appendChild(el("rect", { x:PAD_L+PW-paDepth, y:paY, width:paDepth, height:paH,
+  svgEl.appendChild(el("rect", { x:PAD_L+PW-paDepth, y:paY, width:paDepth, height:paH,
     fill:"none", stroke:"rgba(255,255,255,0.25)", "stroke-width":1 }));
-
-  // Goal mouths
-  const gmH = PH * 0.15, gmY = PAD_T + PH/2 - gmH/2;
-  svg.appendChild(el("rect", { x:PAD_L-6, y:gmY, width:8, height:gmH,
+  const gmH = PH*0.15, gmY = PAD_T+PH/2-gmH/2;
+  svgEl.appendChild(el("rect", { x:PAD_L-6, y:gmY, width:8, height:gmH,
     fill:"none", stroke:"rgba(255,255,255,0.5)", "stroke-width":1.5 }));
-  svg.appendChild(el("rect", { x:PAD_L+PW-2, y:gmY, width:8, height:gmH,
+  svgEl.appendChild(el("rect", { x:PAD_L+PW-2, y:gmY, width:8, height:gmH,
     fill:"none", stroke:"rgba(255,255,255,0.5)", "stroke-width":1.5 }));
-
-  // Third lines
   for (const t of [1/3, 2/3]) {
     const tx = sx(t);
-    svg.appendChild(el("line", { x1:tx, y1:PAD_T, x2:tx, y2:PAD_T+PH,
+    svgEl.appendChild(el("line", { x1:tx, y1:PAD_T, x2:tx, y2:PAD_T+PH,
       stroke:"rgba(255,255,255,0.08)", "stroke-width":1, "stroke-dasharray":"4 4" }));
   }
+  svgEl.appendChild(el("text", { x:PAD_L-4, y:PAD_T-4, "text-anchor":"end",
+    fill:"rgba(255,255,255,0.25)", "font-size":8 }, "y=0 own goal"));
+  svgEl.appendChild(el("text", { x:PAD_L+PW+4, y:PAD_T-4, "text-anchor":"start",
+    fill:"rgba(255,255,255,0.25)", "font-size":8 }, "y=1 opp goal"));
+}
 
-  // Axis labels (left side)
-  svg.appendChild(el("text", { x:PAD_L-4, y:PAD_T-6,
-    "text-anchor":"end", fill:"rgba(255,255,255,0.3)", "font-size":8 }, "OWN GOAL  y=0"));
-  svg.appendChild(el("text", { x:PAD_L+PW+4, y:PAD_T-6,
-    "text-anchor":"start", fill:"rgba(255,255,255,0.3)", "font-size":8 }, "y=1  OPP GOAL"));
-  svg.appendChild(el("text", { x:6, y:PAD_T+4,
-    "text-anchor":"start", fill:"rgba(255,255,255,0.25)", "font-size":8 }, "x=0 (LB/LW flank)"));
-  svg.appendChild(el("text", { x:6, y:PAD_T+PH,
-    "text-anchor":"start", fill:"rgba(255,255,255,0.25)", "font-size":8 }, "x=1 (RB/RW flank)"));
+const HANDLE_R = 5;
 
-  // Draw zones — sim y→screen x, sim x→screen y
-  for (const r of roles) {
+function drawPitch(svgId, depth) {
+  const svgEl = document.getElementById(svgId);
+  svgElements[svgId] = {};
+  drawPitchBase(svgEl);
+
+  for (const r of zones) {
+    const orig = ORIGINAL.find(o => o.role === r.role);
     const c = COLORS[r.role];
     const z = zoneAt(r, depth);
-
-    // zone rect in screen coords
-    const rx = sx(z.yMin);
-    const ry = sy(r.xMin);
+    const rx = sx(z.yMin), ry = sy(r.xMin);
     const rw = sx(z.yMax) - sx(z.yMin);
     const rh = sy(r.xMax) - sy(r.xMin);
 
-    svg.appendChild(el("rect", { x:rx, y:ry, width:rw, height:rh,
-      fill:c.fill, stroke:c.stroke,
-      "stroke-width":1.5, "stroke-dasharray":"4 3", rx:3 }));
+    // In diff mode: draw original as ghost first
+    if (mode === "diff") {
+      const oz = zoneAt(orig, depth);
+      const orx = sx(oz.yMin), ory = sy(orig.xMin);
+      const orw = sx(oz.yMax) - sx(oz.yMin);
+      const orh = sy(orig.xMax) - sy(orig.xMin);
+      svgEl.appendChild(el("rect", { x:orx, y:ory, width:orw, height:orh,
+        fill:"rgba(255,255,255,0.04)", stroke:"rgba(255,255,255,0.25)",
+        "stroke-width":1, "stroke-dasharray":"4 3", rx:3, "pointer-events":"none" }));
+    }
 
-    // Label
-    svg.appendChild(el("text", {
-      x: rx + rw/2, y: ry + rh/2 + 4,
-      "text-anchor":"middle", fill:c.label,
+    const rect = el("rect", { x:rx, y:ry, width:rw, height:rh,
+      fill:c.fill, stroke:c.stroke, "stroke-width":1.5, "stroke-dasharray":"4 3",
+      rx:3, "pointer-events":"none" });
+
+    const label = el("text", {
+      x: rx+rw/2, y: ry+rh/2+4, "text-anchor":"middle", fill:c.label,
       "font-size":10, "font-weight":"bold",
-      "paint-order":"stroke", stroke:"rgba(0,0,0,0.8)", "stroke-width":3
-    }, r.role));
+      "paint-order":"stroke", stroke:"rgba(0,0,0,0.8)", "stroke-width":3,
+      "pointer-events":"none",
+    }, r.role);
+
+    // Drag handles (shown on hover in edit mode)
+    const handles = [];
+    const handleDefs = [
+      { px: rx,      py: ry+rh/2 }, // yMin
+      { px: rx+rw,   py: ry+rh/2 }, // yMax
+      { px: rx+rw/2, py: ry       }, // xMin
+      { px: rx+rw/2, py: ry+rh    }, // xMax
+    ];
+    for (const { px: hx, py: hy } of handleDefs) {
+      const h = el("circle", { cx:hx, cy:hy, r:HANDLE_R,
+        fill:"rgba(255,255,255,0.7)", stroke:"rgba(0,0,0,0.5)", "stroke-width":1,
+        opacity:"0", "pointer-events":"none" });
+      handles.push(h);
+      svgEl.appendChild(h);
+    }
+
+    svgEl.appendChild(rect);
+    svgEl.appendChild(label);
+
+    svgElements[svgId][r.role] = { rect, label, handles };
   }
 
-  // Ball dot
-  const ballScreenX = sx(depth);
-  const ballScreenY = sy(0.5);
-  svg.appendChild(el("circle", { cx:ballScreenX, cy:ballScreenY, r:6,
-    fill:"white", stroke:"#333", "stroke-width":1.5 }));
-  svg.appendChild(el("text", { x:ballScreenX, y:ballScreenY - 9,
-    "text-anchor":"middle", fill:"white", "font-size":8 }, "ball"));
+  // Ball indicator
+  const bx = sx(depth), by = sy(0.5);
+  svgEl.appendChild(el("circle", { cx:bx, cy:by, r:5,
+    fill:"white", stroke:"#333", "stroke-width":1.5, "pointer-events":"none" }));
+  svgEl.appendChild(el("text", { x:bx, y:by-8, "text-anchor":"middle",
+    fill:"white", "font-size":8, "pointer-events":"none" }, "ball"));
 }
 
-drawPitch("deep", 0);
-drawPitch("high", 1);
+function redrawAll() {
+  drawPitch("deep", 0);
+  drawPitch("high", 1);
+  setHovered(hoveredRole);
+}
 
-// Legend
+// ─── Panel ───────────────────────────────────────────────────────────────────
+
+function updatePanel() {
+  const container = document.getElementById("config-values");
+  let html = "";
+  for (const r of zones) {
+    const orig = ORIGINAL.find(o => o.role === r.role);
+    const c = COLORS[r.role];
+    function field(key) {
+      const cur = r[key], org = orig[key];
+      const changed = Math.abs(cur - org) > 0.005;
+      return `<div class="config-field${changed ? " changed" : ""}">${key}: <span>${fmt(cur)}</span></div>`;
+    }
+    html += `
+      <div class="config-role">
+        <div class="config-role-header" style="color:${c.label}"
+             onclick="setHoveredLocked('${r.role}')">${r.role}</div>
+        <div class="config-fields">
+          ${field("xMin")}${field("xMax")}
+          ${field("yMinDeep")}${field("yMaxDeep")}
+          ${field("yMinHigh")}${field("yMaxHigh")}
+        </div>
+      </div>`;
+  }
+  container.innerHTML = html;
+
+  // Export code
+  const lines = zones.map(r => {
+    const p = (n) => n.toFixed(2);
+    return `  { role:"${r.role.padEnd(3)}", xMin:${p(r.xMin)}, xMax:${p(r.xMax)}, yMinDeep:${p(r.yMinDeep)}, yMinHigh:${p(r.yMinHigh)}, yMaxDeep:${p(r.yMaxDeep)}, yMaxHigh:${p(r.yMaxHigh)} },`;
+  });
+  document.getElementById("export-code").textContent = "const roles = [\n" + lines.join("\n") + "\n];";
+}
+
+function setHoveredLocked(role) {
+  if (lockedRole === role) { lockedRole = null; setHovered(null); hideTooltip(); }
+  else { lockedRole = role; setHovered(role); }
+}
+
+function copyExport() {
+  const text = document.getElementById("export-code").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector(".copy-btn");
+    btn.textContent = "copied!";
+    setTimeout(() => { btn.textContent = "copy"; }, 1200);
+  });
+}
+
+// ─── Legend ──────────────────────────────────────────────────────────────────
+
 const legendEl = document.getElementById("legend");
 const seen = new Set();
-for (const r of roles) {
+for (const r of zones) {
   if (seen.has(r.role)) continue;
   seen.add(r.role);
   const c = COLORS[r.role];
   const item = document.createElement("div");
   item.className = "legend-item";
+  item.dataset.role = r.role;
   item.innerHTML = `<div class="swatch" style="background:${c.fill};border:1.5px solid ${c.stroke}"></div><span style="color:${c.label}">${r.role}</span>`;
+  item.addEventListener("click", () => setHoveredLocked(r.role));
   legendEl.appendChild(item);
 }
 
-document.getElementById("note").innerHTML = `
-  <strong>Orientation matches the in-game renderer</strong> (simToScreen: sim·y → px·x, sim·x → px·y).<br>
-  Horizontal axis = depth (own goal → opp goal). Vertical axis = flank (top = LB/LW side, bottom = RB/RW side).<br>
-  Zone y-bounds interpolate linearly with ball depth between the two states above.
-`;
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+setupDragListeners(document.getElementById("deep"), 0);
+setupDragListeners(document.getElementById("high"), 1);
+
+redrawAll();
+updatePanel();
 </script>
 </body>
 </html>

@@ -25,6 +25,7 @@ function channelOpponent(
 
 export const ChannelCoverAction: Action = {
 	canExecute(ctx: ActionContext): boolean {
+		return false;
 		if (ctx.phase !== "open_play") return false;
 		const role = ctx.player.role;
 		if (role !== "LW" && role !== "RW" && role !== "LB" && role !== "RB")

@@ -1,4 +1,4 @@
-import { ChannelCoverAction } from "./actions/ChannelCoverAction";
+import { DefensivePositionAction } from "./actions/DefensivePositionAction";
 import { DribbleAction } from "./actions/DribbleAction";
 import { GradientClimbAction } from "./actions/GradientClimbAction";
 import { HoldAction } from "./actions/HoldAction";
@@ -12,16 +12,15 @@ import type {
 	MatchPlayer,
 	PlayerRole,
 } from "./actions/types";
-
+import { kickoffPosition } from "./positions";
+import type { MatchPhase, SimFrame, XY } from "./types";
 
 function inferRole(position: "GK" | "DEF" | "MID" | "FWD", slotIndex: number): PlayerRole {
 	if (position === "GK") return "GK";
 	if (position === "DEF") return (["LB", "CB", "CB", "RB"] as PlayerRole[])[slotIndex] ?? "CB";
 	if (position === "MID") return (["LW", "CM", "CM", "RW"] as PlayerRole[])[slotIndex] ?? "CM";
-	return "CF";
+	return (["CF", "SS"] as PlayerRole[])[slotIndex] ?? "CF";
 }
-import { kickoffPosition } from "./positions";
-import type { MatchPhase, SimFrame, XY } from "./types";
 
 export interface PlayerSeed {
 	id: string;
@@ -42,7 +41,7 @@ const INTERCEPTION_RADIUS = 0.04;
 const INTERCEPTION_BASE_CHANCE = 0.7;
 
 // Evaluated in order; first action whose canExecute returns true wins.
-const MOVEMENT_ACTIONS: Action[] = [GradientClimbAction, ChannelCoverAction, PressAction, HoldAction];
+const MOVEMENT_ACTIONS: Action[] = [GradientClimbAction, PressAction, DefensivePositionAction, HoldAction];
 const BALL_ACTIONS: BallAction[] = [DribbleAction, PassAction];
 
 interface LivePlayer extends MatchPlayer {

@@ -10,7 +10,8 @@ export type PlayerRole =
 	| "CDM"
 	| "RW"
 	| "CAM"
-	| "CF";
+	| "CF"
+	| "SS";
 
 export interface MatchPlayer {
 	id: string;

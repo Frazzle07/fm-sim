@@ -273,6 +273,17 @@ function PlayerDot({ player, color }: { player: SimPlayer; color: string }) {
 				strokeWidth={1}
 			/>
 			<text
+				y={0}
+				dy="0.35em"
+				textAnchor="middle"
+				fontSize={4.5}
+				fontWeight={700}
+				fill="rgba(255,255,255,0.95)"
+				style={{ pointerEvents: "none", userSelect: "none" }}
+			>
+				{player.position}
+			</text>
+			<text
 				y={16}
 				textAnchor="middle"
 				fontSize={5}
@@ -312,6 +323,8 @@ export default function MatchPitch({
 	const frameCounterRef = useRef(0);
 	const lastFrameRef = useRef<SimFrame | null>(null);
 	const [frame, setFrame] = useState<SimFrame | null>(null);
+	const [paused, setPaused] = useState(false);
+	const pausedRef = useRef(false);
 
 	useEffect(() => {
 		simRef.current = new MatchSimulator(homePlayers, awayPlayers);
@@ -321,6 +334,11 @@ export default function MatchPitch({
 		function loop() {
 			const sim = simRef.current;
 			if (!sim) return;
+
+			if (pausedRef.current) {
+				rafRef.current = requestAnimationFrame(loop);
+				return;
+			}
 
 			const nowMs = performance.now();
 			let latestFrame: SimFrame | null = null;
@@ -355,19 +373,43 @@ export default function MatchPitch({
 		return () => cancelAnimationFrame(rafRef.current);
 	}, [ticksPerFrame, onFrame]);
 
+	function togglePause() {
+		const next = !pausedRef.current;
+		pausedRef.current = next;
+		setPaused(next);
+	}
+
 	if (!frame) return null;
 
 	return (
 		<div>
 			<div
 				style={{
-					textAlign: "center",
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+					gap: 8,
 					marginBottom: 8,
-					fontSize: 11,
-					color: "rgba(255,255,255,0.5)",
 				}}
 			>
-				{frame.minute}' · {frame.phase}
+				<span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+					{frame.minute}' · {frame.phase}
+				</span>
+				<button
+					type="button"
+					onClick={togglePause}
+					style={{
+						fontSize: 11,
+						padding: "2px 8px",
+						borderRadius: 4,
+						border: "1px solid rgba(255,255,255,0.2)",
+						background: "rgba(255,255,255,0.08)",
+						color: "rgba(255,255,255,0.7)",
+						cursor: "pointer",
+					}}
+				>
+					{paused ? "Resume" : "Pause"}
+				</button>
 			</div>
 			<div
 				style={{

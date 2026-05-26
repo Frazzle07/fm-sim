@@ -4,9 +4,9 @@ import type { ZoneConfig } from "./types";
 // so they hold the midfield line and don't push into the attacking third.
 export const RB: ZoneConfig = {
 	xMin: 0.7,
-	xMax: 0.95,
-	yMinDeep: 0.15,
+	xMax: 1.0,
+	yMinDeep: 0.05,
 	yMinHigh: 0.22,
-	yMaxDeep: 0.45,
-	yMaxHigh: 0.55,
+	yMaxDeep: 0.35,
+	yMaxHigh: 0.65,
 };

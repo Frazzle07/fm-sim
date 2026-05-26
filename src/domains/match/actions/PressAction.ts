@@ -1,5 +1,7 @@
 import { dist, nearest } from "../queries";
 import type { XY } from "../types";
+import { activeZone } from "./GradientClimbAction";
+import { ROLE_ZONE_CONFIG } from "./roles";
 import type { Action, ActionContext, MatchPlayer } from "./types";
 
 export const PRESSURE_RADIUS = 0.08;
@@ -15,7 +17,7 @@ function shadowTarget(ctx: ActionContext, holder: MatchPlayer): XY {
 	);
 
 	if (forwardReceivers.length === 0) {
-		return { x: holder.x, y: holder.y };
+		return { x: ctx.player.baseX, y: ctx.player.baseY };
 	}
 
 	const opponents = ctx.allPlayers.filter((p) => p.isHome !== holder.isHome);
@@ -41,11 +43,21 @@ function shadowTarget(ctx: ActionContext, holder: MatchPlayer): XY {
 export const PressAction: Action = {
 	canExecute(ctx: ActionContext): boolean {
 		if (ctx.phase !== "open_play") return false;
-		const targetId = ctx.ballHolderId ?? ctx.ballReceiverId;
-		if (targetId === null) return false;
-		const target = ctx.allPlayers.find((p) => p.id === targetId);
-		if (!target) return false;
-		return ctx.player.isHome !== target.isHome && ctx.player.position === "FWD";
+		if (ctx.player.position === "GK") return false;
+		const holderId = ctx.ballHolderId ?? ctx.ballReceiverId;
+		if (holderId === null) return false;
+		const holder = ctx.allPlayers.find((p) => p.id === holderId);
+		if (!holder) return false;
+		if (ctx.player.isHome === holder.isHome) return false;
+		const zoneConfig = ROLE_ZONE_CONFIG[ctx.player.role];
+		if (!zoneConfig) return false;
+		const zone = activeZone(ctx.player, ctx.ball, zoneConfig);
+		return (
+			holder.x >= zone.xMin &&
+			holder.x <= zone.xMax &&
+			holder.y >= zone.yMin &&
+			holder.y <= zone.yMax
+		);
 	},
 
 	execute(ctx: ActionContext): XY {

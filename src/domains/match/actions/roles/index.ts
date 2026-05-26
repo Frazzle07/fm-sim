@@ -9,6 +9,7 @@ import { LB } from "./LB";
 import { LW } from "./LW";
 import { RB } from "./RB";
 import { RW } from "./RW";
+import { SS } from "./SS";
 
 export type { ZoneConfig };
 
@@ -22,4 +23,5 @@ export const ROLE_ZONE_CONFIG: Partial<Record<PlayerRole, ZoneConfig>> = {
 	RW,
 	CAM,
 	CF,
+	SS,
 };
