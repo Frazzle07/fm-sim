@@ -8,4 +8,5 @@ export const CDM: ZoneConfig = {
 	yMinHigh: 0.25,
 	yMaxDeep: 0.38,
 	yMaxHigh: 0.55,
+	idealBallOffset: -0.1,
 };

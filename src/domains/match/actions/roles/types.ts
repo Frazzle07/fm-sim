@@ -7,4 +7,11 @@ export interface ZoneConfig {
 	yMinHigh: number;
 	yMaxDeep: number;
 	yMaxHigh: number;
+	/**
+	 * How far ahead of the ball (in attacking direction, 0–1 pitch units) this
+	 * role ideally positions itself. Positive = ahead, negative = behind.
+	 * Used instead of a shared depth-alignment metric so each role maintains
+	 * its own depth relative to the ball rather than collapsing to ball depth.
+	 */
+	idealBallOffset: number;
 }

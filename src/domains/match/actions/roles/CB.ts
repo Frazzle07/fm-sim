@@ -9,4 +9,5 @@ export const CB: ZoneConfig = {
 	yMinHigh: 0.17,
 	yMaxDeep: 0.3,
 	yMaxHigh: 0.42,
+	idealBallOffset: -0.25,
 };

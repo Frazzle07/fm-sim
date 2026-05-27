@@ -8,4 +8,5 @@ export const SS: ZoneConfig = {
 	yMinHigh: 0.45,
 	yMaxDeep: 0.6,
 	yMaxHigh: 0.95,
+	idealBallOffset: 0.12,
 };

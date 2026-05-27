@@ -8,4 +8,5 @@ export const CAM: ZoneConfig = {
 	yMinHigh: 0.45,
 	yMaxDeep: 0.6,
 	yMaxHigh: 0.82,
+	idealBallOffset: 0.1,
 };
