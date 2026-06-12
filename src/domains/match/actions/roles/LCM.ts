@@ -1,13 +1,13 @@
 import type { ZoneConfig } from "./types";
 
-// CMs occupy the central corridor across the middle third.
+// Left-central midfielder: occupies the left half of the central corridor.
 // Push forward when attacking, drop to midfield line when defending.
-export const CM: ZoneConfig = {
+export const LCM: ZoneConfig = {
 	xMin: 0.25,
-	xMax: 0.75,
+	xMax: 0.5,
 	yMinDeep: 0.2,
-	yMinHigh: 0.38,
+	yMinHigh: 0.48,
 	yMaxDeep: 0.55,
-	yMaxHigh: 0.75,
+	yMaxHigh: 0.85,
 	idealBallOffset: 0.05,
 };

@@ -1,8 +1,38 @@
+import type { ActionContext } from "./actions/types";
 import type { XY } from "./types";
 
 export interface Located {
 	x: number;
 	y: number;
+}
+
+// Converts a raw y coordinate to attacking depth (0 = own goal, 1 = opponent goal).
+export function attackingDepth(y: number, isHome: boolean): number {
+	return isHome ? 1 - y : y;
+}
+
+// Soft clamp: pulls value toward [min, max] by `strength` rather than snapping.
+// Lets players briefly chase the ball just outside their zone instead of stuttering at the edge.
+export function softClamp(
+	value: number,
+	min: number,
+	max: number,
+	strength = 0.7,
+): number {
+	if (value < min) return value + (min - value) * strength;
+	if (value > max) return value - (value - max) * strength;
+	return value;
+}
+
+export function teamIsInPossession(ctx: ActionContext): boolean {
+	const carrierId = ctx.ballHolderId ?? ctx.ballReceiverId;
+	if (carrierId === null) return false;
+	const carrier = ctx.allPlayers.find((p) => p.id === carrierId);
+	return carrier?.isHome === ctx.player.isHome;
+}
+
+export function ballIsLoose(ctx: ActionContext): boolean {
+	return ctx.ballHolderId === null && ctx.ballReceiverId === null;
 }
 
 // Returns the minimum distance from point `p` to the line segment `a`→`b`.

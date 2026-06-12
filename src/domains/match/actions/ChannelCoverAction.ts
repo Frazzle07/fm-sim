@@ -1,4 +1,4 @@
-import { activeZone } from "./GradientClimbAction";
+import { activeZone } from "./AttackingPositionAction";
 import { ROLE_ZONE_CONFIG } from "./roles";
 import type { Action, ActionContext, MatchPlayer } from "./types";
 

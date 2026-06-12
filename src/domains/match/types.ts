@@ -12,6 +12,7 @@ export interface SimPlayer {
 	x: number;
 	y: number;
 	hasBall: boolean;
+	fullbackPhase?: string | null;
 }
 
 export type MatchPhase =

@@ -6,8 +6,8 @@ export const LB: ZoneConfig = {
 	xMin: 0.0,
 	xMax: 0.3,
 	yMinDeep: 0.05,
-	yMinHigh: 0.22,
+	yMinHigh: 0.35,
 	yMaxDeep: 0.35,
-	yMaxHigh: 0.65,
-	idealBallOffset: -0.1,
+	yMaxHigh: 0.72,
+	idealBallOffset: 0.05,
 };

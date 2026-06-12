@@ -1,6 +1,7 @@
+import { AttackingPositionAction } from "./actions/AttackingPositionAction";
 import { DefensivePositionAction } from "./actions/DefensivePositionAction";
 import { DribbleAction } from "./actions/DribbleAction";
-import { GradientClimbAction } from "./actions/GradientClimbAction";
+import { FullbackAttackingAction } from "./actions/FullbackAttackingAction";
 import { HoldAction } from "./actions/HoldAction";
 import { PassAction } from "./actions/PassAction";
 import { PressAction } from "./actions/PressAction";
@@ -11,14 +12,20 @@ import type {
 	BallAction,
 	MatchPlayer,
 	PlayerRole,
+	StatefulAction,
 } from "./actions/types";
 import { kickoffPosition } from "./positions";
 import type { MatchPhase, SimFrame, XY } from "./types";
 
-function inferRole(position: "GK" | "DEF" | "MID" | "FWD", slotIndex: number): PlayerRole {
+function inferRole(
+	position: "GK" | "DEF" | "MID" | "FWD",
+	slotIndex: number,
+): PlayerRole {
 	if (position === "GK") return "GK";
-	if (position === "DEF") return (["LB", "CB", "CB", "RB"] as PlayerRole[])[slotIndex] ?? "CB";
-	if (position === "MID") return (["LW", "CM", "CM", "RW"] as PlayerRole[])[slotIndex] ?? "CM";
+	if (position === "DEF")
+		return (["LB", "LCB", "RCB", "RB"] as PlayerRole[])[slotIndex] ?? "LCB";
+	if (position === "MID")
+		return (["LW", "LCM", "RCM", "RW"] as PlayerRole[])[slotIndex] ?? "LCM";
 	return (["CF", "SS"] as PlayerRole[])[slotIndex] ?? "CF";
 }
 
@@ -41,16 +48,33 @@ const INTERCEPTION_RADIUS = 0.04;
 const INTERCEPTION_BASE_CHANCE = 0.7;
 
 // Evaluated in order; first action whose canExecute returns true wins.
-const MOVEMENT_ACTIONS: Action[] = [GradientClimbAction, PressAction, DefensivePositionAction, HoldAction];
+// PressAction leads: when the opposition has the ball, closing it down takes
+// precedence over positional/attacking movement (it only fires while defending,
+// so it never overrides attacking actions). This also lets a fullback who is the
+// nearest defender step out to press instead of running its attacking phases.
+const MOVEMENT_ACTIONS: Action[] = [
+	PressAction,
+	FullbackAttackingAction,
+	AttackingPositionAction,
+	DefensivePositionAction,
+	HoldAction,
+];
 const BALL_ACTIONS: BallAction[] = [DribbleAction, PassAction];
+
+function isStateful(action: Action): action is StatefulAction {
+	return "stateKey" in action;
+}
 
 interface LivePlayer extends MatchPlayer {
 	targetX: number;
 	targetY: number;
+	speedMultiplier: number;
 	phaseX: number;
 	phaseY: number;
 	freqX: number;
 	freqY: number;
+	// Opaque per-player state bags, keyed by action.stateKey.
+	actionState: Record<string, Record<string, unknown>>;
 }
 
 interface BallFlight {
@@ -72,6 +96,7 @@ export class MatchSimulator {
 	private players: LivePlayer[];
 	private phase: MatchPhase = "kickoff";
 	private ball: XY = { x: 0.5, y: 0.5 };
+	private prevBall: XY = { x: 0.5, y: 0.5 };
 	private ballHolderId: string | null = null;
 	private ballFlight: BallFlight | null = null;
 	// Maps player id → tick at which they last gained possession (intercept or receive).
@@ -107,28 +132,36 @@ export class MatchSimulator {
 				baseY: y,
 				targetX: x,
 				targetY: y,
+				speedMultiplier: 1,
 				phaseX: Math.random() * Math.PI * 2,
 				phaseY: Math.random() * Math.PI * 2,
 				freqX: 0.04 + Math.random() * 0.03,
 				freqY: 0.04 + Math.random() * 0.03,
+				actionState: {},
 			};
 		});
 	}
 
-	private buildContext(player: LivePlayer): ActionContext {
+	private buildContext(player: LivePlayer, stateKey?: string): ActionContext {
 		return {
 			player,
 			allPlayers: this.players,
 			ball: this.ball,
+			ballVelocity: {
+				x: this.ball.x - this.prevBall.x,
+				y: this.ball.y - this.prevBall.y,
+			},
 			ballHolderId: this.ballHolderId,
 			ballReceiverId: this.ballFlight?.receiverId ?? null,
 			phase: this.phase,
 			tick: this.tick,
+			playerState: stateKey ? (player.actionState[stateKey] ?? {}) : {},
 		};
 	}
 
 	advance(nowMs: number): SimFrame {
-		// Stage 1: Increment tick.
+		// Stage 1: Increment tick and snapshot ball position for velocity computation.
+		this.prevBall = { ...this.ball };
 		this.tick++;
 
 		// Stage 2: Phase transitions.
@@ -158,9 +191,7 @@ export class MatchSimulator {
 							};
 							this.ballHolderId = null;
 							// Pin the receiver in place so they wait for the ball.
-							const recv = this.players.find(
-								(p) => p.id === cmd.receiverId,
-							);
+							const recv = this.players.find((p) => p.id === cmd.receiverId);
 							if (recv) {
 								recv.targetX = recv.x;
 								recv.targetY = recv.y;
@@ -204,12 +235,28 @@ export class MatchSimulator {
 			}
 
 			for (const action of MOVEMENT_ACTIONS) {
-				if (action.canExecute(ctx)) {
+				if (!action.canExecute(ctx)) continue;
+
+				if (isStateful(action)) {
+					// Let the action advance its own state, then execute with the updated state.
+					const prevState = p.actionState[action.stateKey] ?? {};
+					const nextState = action.updateState(ctx, prevState);
+					p.actionState[action.stateKey] = nextState;
+					const ctxWithState: ActionContext = {
+						...ctx,
+						playerState: nextState,
+					};
+					const target = action.executeStateful(ctxWithState);
+					p.targetX = target.x;
+					p.targetY = target.y;
+					p.speedMultiplier = action.speedMultiplier?.(ctxWithState) ?? 1;
+				} else {
 					const target = action.execute(ctx);
 					p.targetX = target.x;
 					p.targetY = target.y;
-					break;
+					p.speedMultiplier = 1;
 				}
+				break;
 			}
 		}
 
@@ -218,9 +265,10 @@ export class MatchSimulator {
 			const dx = p.targetX - p.x;
 			const dy = p.targetY - p.y;
 			const dist = Math.hypot(dx, dy);
-			if (dist > MOVE_SPEED) {
-				p.x += (dx / dist) * MOVE_SPEED;
-				p.y += (dy / dist) * MOVE_SPEED;
+			const speed = MOVE_SPEED * p.speedMultiplier;
+			if (dist > speed) {
+				p.x += (dx / dist) * speed;
+				p.y += (dy / dist) * speed;
 			} else {
 				p.x = p.targetX;
 				p.y = p.targetY;
@@ -309,14 +357,20 @@ export class MatchSimulator {
 				({
 					baseX: _bx,
 					baseY: _by,
+					speedMultiplier: _sm,
 					phaseX: _px,
 					phaseY: _py,
 					freqX: _fx,
 					freqY: _fy,
+					actionState,
 					...rest
 				}) => ({
 					...rest,
 					hasBall: rest.id === this.ballHolderId,
+					// Expose fullback phase for debug rendering.
+					...(actionState.fullback?.phase != null
+						? { fullbackPhase: actionState.fullback.phase as string }
+						: {}),
 				}),
 			),
 		};

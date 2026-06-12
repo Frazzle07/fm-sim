@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { activeZone } from "#/domains/match/actions/GradientClimbAction";
+import {
+	activeZone,
+	activityLevel,
+} from "#/domains/match/actions/AttackingPositionAction";
 import { ROLE_ZONE_CONFIG } from "#/domains/match/actions/roles";
 import { distToSegment } from "#/domains/match/queries";
 import type { PlayerSeed } from "#/domains/match/simulator";
@@ -15,10 +18,12 @@ const LANE_BLOCK_RADIUS = 0.06; // keep in sync with PassAction.ts
 const ROLE_COLORS: Record<string, string> = {
 	GK: "rgba(255,220,50,0.15)",
 	LB: "rgba(50,180,255,0.12)",
-	CB: "rgba(50,100,255,0.12)",
+	LCB: "rgba(50,100,255,0.12)",
+	RCB: "rgba(50,140,255,0.12)",
 	RB: "rgba(50,180,255,0.12)",
 	LW: "rgba(255,100,50,0.12)",
-	CM: "rgba(80,255,120,0.12)",
+	LCM: "rgba(80,255,120,0.12)",
+	RCM: "rgba(120,255,160,0.12)",
 	CDM: "rgba(80,200,80,0.12)",
 	RW: "rgba(255,100,50,0.12)",
 	CAM: "rgba(255,160,50,0.12)",
@@ -27,10 +32,12 @@ const ROLE_COLORS: Record<string, string> = {
 const ROLE_STROKE: Record<string, string> = {
 	GK: "rgba(255,220,50,0.4)",
 	LB: "rgba(50,180,255,0.35)",
-	CB: "rgba(50,100,255,0.35)",
+	LCB: "rgba(50,100,255,0.35)",
+	RCB: "rgba(50,140,255,0.35)",
 	RB: "rgba(50,180,255,0.35)",
 	LW: "rgba(255,100,50,0.35)",
-	CM: "rgba(80,255,120,0.35)",
+	LCM: "rgba(80,255,120,0.35)",
+	RCM: "rgba(120,255,160,0.35)",
 	CDM: "rgba(80,200,80,0.35)",
 	RW: "rgba(255,100,50,0.35)",
 	CAM: "rgba(255,160,50,0.35)",
@@ -41,28 +48,63 @@ function ZoneOverlay({ frame }: { frame: SimFrame }) {
 	return (
 		<>
 			{frame.players.map((p) => {
-				const config = ROLE_ZONE_CONFIG[p.role as keyof typeof ROLE_ZONE_CONFIG];
+				const config =
+					ROLE_ZONE_CONFIG[p.role as keyof typeof ROLE_ZONE_CONFIG];
 				if (!config) return null;
 				const zone = activeZone(p, frame.ball, config);
-				// sim coords: x → screen y, y → screen x (see simToScreen)
 				const { px: x1, py: y1 } = simToScreen(zone.xMin, zone.yMin);
 				const { px: x2, py: y2 } = simToScreen(zone.xMax, zone.yMax);
 				const rx = Math.min(x1, x2);
 				const ry = Math.min(y1, y2);
 				const rw = Math.abs(x2 - x1);
 				const rh = Math.abs(y2 - y1);
+				// Zone center crosshair
+				const cx = (x1 + x2) / 2;
+				const cy = (y1 + y2) / 2;
+				const activity = activityLevel(p, frame.ball, config);
+				const stroke = ROLE_STROKE[p.role] ?? "rgba(255,255,255,0.3)";
 				return (
-					<rect
-						key={p.id}
-						x={rx}
-						y={ry}
-						width={rw}
-						height={rh}
-						fill={ROLE_COLORS[p.role] ?? "rgba(255,255,255,0.08)"}
-						stroke={ROLE_STROKE[p.role] ?? "rgba(255,255,255,0.3)"}
-						strokeWidth={1}
-						strokeDasharray="3 2"
-					/>
+					<g key={p.id}>
+						<rect
+							x={rx}
+							y={ry}
+							width={rw}
+							height={rh}
+							fill={ROLE_COLORS[p.role] ?? "rgba(255,255,255,0.08)"}
+							stroke={stroke}
+							strokeWidth={1}
+							strokeDasharray="3 2"
+						/>
+						<line
+							x1={cx - 8}
+							y1={cy}
+							x2={cx + 8}
+							y2={cy}
+							stroke="white"
+							strokeWidth={1.5}
+						/>
+						<line
+							x1={cx}
+							y1={cy - 8}
+							x2={cx}
+							y2={cy + 8}
+							stroke="white"
+							strokeWidth={1.5}
+						/>
+						<text
+							x={cx}
+							y={cy - 11}
+							textAnchor="middle"
+							fontSize={9}
+							fontWeight={700}
+							fill="white"
+							stroke="black"
+							strokeWidth={2}
+							paintOrder="stroke"
+						>
+							{p.role} {activity.toFixed(2)}
+						</text>
+					</g>
 				);
 			})}
 		</>
@@ -255,7 +297,12 @@ function Ball({ x, y }: { x: number; y: number }) {
 	return (
 		<g transform={`translate(${px},${py})`}>
 			<ellipse rx={4} ry={1.5} cy={5} fill="rgba(0,0,0,0.2)" />
-			<circle r={4} fill="#f5f0dc" stroke="rgba(0,0,0,0.4)" strokeWidth={0.75} />
+			<circle
+				r={4}
+				fill="#f5f0dc"
+				stroke="rgba(0,0,0,0.4)"
+				strokeWidth={0.75}
+			/>
 		</g>
 	);
 }
@@ -305,6 +352,7 @@ interface Props {
 	ticksPerFrame?: number;
 	showLanes?: boolean;
 	showZones?: boolean;
+	showFullbackPhases?: boolean;
 	onFrame?: (frame: SimFrame) => void;
 }
 
@@ -316,6 +364,7 @@ export default function MatchPitch({
 	ticksPerFrame = 1,
 	showLanes = false,
 	showZones = false,
+	showFullbackPhases = false,
 	onFrame,
 }: Props) {
 	const simRef = useRef<MatchSimulator | null>(null);
@@ -435,6 +484,29 @@ export default function MatchPitch({
 						.map((p) => (
 							<PlayerDot key={p.id} player={p} color={homeColor} />
 						))}
+					{showFullbackPhases &&
+						frame.players
+							.filter((p) => p.fullbackPhase != null)
+							.map((p) => {
+								const { px, py } = simToScreen(p.x, p.y);
+								return (
+									<text
+										key={p.id}
+										x={px}
+										y={py - 14}
+										textAnchor="middle"
+										fontSize={7}
+										fontWeight={700}
+										fill="white"
+										stroke="black"
+										strokeWidth={2}
+										paintOrder="stroke"
+										style={{ pointerEvents: "none", userSelect: "none" }}
+									>
+										{p.fullbackPhase}
+									</text>
+								);
+							})}
 					{showLanes && <PassLaneOverlay frame={frame} />}
 					<Ball x={frame.ball.x} y={frame.ball.y} />
 				</svg>

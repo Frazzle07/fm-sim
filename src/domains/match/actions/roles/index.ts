@@ -1,13 +1,15 @@
 import type { PlayerRole } from "../types";
 import type { ZoneConfig } from "./types";
 import { CAM } from "./CAM";
-import { CB } from "./CB";
 import { CDM } from "./CDM";
 import { CF } from "./CF";
-import { CM } from "./CM";
 import { LB } from "./LB";
+import { LCB } from "./LCB";
+import { LCM } from "./LCM";
 import { LW } from "./LW";
 import { RB } from "./RB";
+import { RCB } from "./RCB";
+import { RCM } from "./RCM";
 import { RW } from "./RW";
 import { SS } from "./SS";
 
@@ -15,10 +17,12 @@ export type { ZoneConfig };
 
 export const ROLE_ZONE_CONFIG: Partial<Record<PlayerRole, ZoneConfig>> = {
 	LB,
-	CB,
+	LCB,
+	RCB,
 	RB,
 	LW,
-	CM,
+	LCM,
+	RCM,
 	CDM,
 	RW,
 	CAM,
