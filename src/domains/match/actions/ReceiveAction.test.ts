@@ -15,6 +15,7 @@ function player(over: Partial<MatchPlayer>): MatchPlayer {
 		y: 0.5,
 		targetX: 0.5,
 		targetY: 0.5,
+		maxSpeed: 1,
 		...over,
 	};
 }

@@ -1,4 +1,5 @@
 import { AttackingPositionAction } from "./actions/AttackingPositionAction";
+import { chooseBallAction } from "./actions/arbiter";
 import { DefensivePositionAction } from "./actions/DefensivePositionAction";
 import { DribbleAction } from "./actions/DribbleAction";
 import { FullbackAttackingAction } from "./actions/FullbackAttackingAction";
@@ -15,6 +16,7 @@ import type {
 	MatchPlayer,
 	PlayerRole,
 	StatefulAction,
+	StatefulBallAction,
 } from "./actions/types";
 import { kickoffPosition } from "./positions";
 import type { MatchPhase, SimFrame, XY } from "./types";
@@ -44,6 +46,16 @@ const TOTAL_TICKS = TOTAL_MINUTES * TICKS_PER_MINUTE;
 const MOVE_SPEED = 0.002;
 const JITTER_RADIUS = 0.0008;
 
+// Pace stub: the shared top-speed ceiling every player gets until a real
+// per-player Pace attribute is wired through PlayerStats + the generator. As a
+// multiplier on MOVE_SPEED, 1 leaves non-carrier movement unchanged.
+const DEFAULT_MAX_SPEED = 1;
+
+// Speed Slew: max change in a carrier's speed multiplier per tick. Stubbed
+// constant — to be driven later by a per-player Acceleration attribute. Small
+// enough that a Drive winds up over several ticks rather than snapping.
+const SLEW_RATE = 0.04;
+
 const TACKLE_SUCCESS_RATE = 0.4;
 
 const INTERCEPTION_RADIUS = 0.04;
@@ -69,9 +81,16 @@ const MOVEMENT_ACTIONS: Action[] = [
 	DefensivePositionAction,
 	HoldAction,
 ];
-const BALL_ACTIONS: BallAction[] = [DribbleAction, PassAction];
+// Ball Action Arbiter (ADR 0004): a *set*, not a priority list. Each eligible
+// action proposes an Expected Gain and the carrier executes the maximum, so
+// order no longer matters. Pass-vs-dribble is a peer trade-off, not a fallback.
+const BALL_ACTIONS: BallAction[] = [PassAction, DribbleAction];
 
 function isStateful(action: Action): action is StatefulAction {
+	return "stateKey" in action;
+}
+
+function isStatefulBall(action: BallAction): action is StatefulBallAction {
 	return "stateKey" in action;
 }
 
@@ -79,6 +98,10 @@ interface LivePlayer extends MatchPlayer {
 	targetX: number;
 	targetY: number;
 	speedMultiplier: number;
+	// Speed Slew: the carrier's *current* speed multiplier, moved toward the
+	// Carry Gear target by at most SLEW_RATE each tick. Off-ball players ignore
+	// this (they snap via speedMultiplier); only the dribbler slews.
+	currentSpeedMultiplier: number;
 	phaseX: number;
 	phaseY: number;
 	freqX: number;
@@ -142,7 +165,9 @@ export class MatchSimulator {
 				baseY: y,
 				targetX: x,
 				targetY: y,
+				maxSpeed: DEFAULT_MAX_SPEED,
 				speedMultiplier: 1,
+				currentSpeedMultiplier: 1,
 				phaseX: Math.random() * Math.PI * 2,
 				phaseY: Math.random() * Math.PI * 2,
 				freqX: 0.04 + Math.random() * 0.03,
@@ -194,29 +219,46 @@ export class MatchSimulator {
 			const holder = this.players.find((p) => p.id === this.ballHolderId);
 			if (holder) {
 				const ctx = this.buildContext(holder);
-				for (const ballAction of BALL_ACTIONS) {
-					if (ballAction.canExecute(ctx)) {
-						const cmd = ballAction.execute(ctx);
-						if (cmd.type === "pass") {
-							this.ballFlight = {
-								fromX: holder.x,
-								fromY: holder.y,
-								toX: cmd.toX,
-								toY: cmd.toY,
-								receiverId: cmd.receiverId,
-								startTimeMs: nowMs,
-								durationMs: cmd.durationMs,
-								easing: cmd.easing,
-							};
-							this.ballHolderId = null;
-							// Receiver is no longer pinned — ReceiveAction runs them onto
-							// the Pass Target so arrival is a contested race.
-						} else if (cmd.type === "dribble") {
-							holder.targetX = cmd.toX;
-							holder.targetY = cmd.toY;
-							dribblerId = holder.id;
-						}
-						break;
+				// Ball Action Arbiter: pick the eligible action with the highest
+				// Expected Gain. propose() is pure, so pricing the losing action
+				// never touched its state.
+				const winner = chooseBallAction(ctx, BALL_ACTIONS);
+				if (winner) {
+					// Winner-only stateful execution: only now does the dribbler's
+					// Carry Gear + dwell advance, and only when dribble actually wins —
+					// so the gear roll stays strictly downstream of selection. Re-price
+					// the winner with the freshly-stored state so its command carries
+					// the real gear (gain is gear-independent, so it does not change).
+					let cmd = winner.proposal.command;
+					if (isStatefulBall(winner.action)) {
+						const prevState = holder.actionState[winner.action.stateKey] ?? {};
+						const nextState = winner.action.updateState(ctx, prevState);
+						holder.actionState[winner.action.stateKey] = nextState;
+						const execCtx = { ...ctx, playerState: nextState };
+						cmd = winner.action.propose(execCtx).command;
+					}
+
+					if (cmd.type === "pass") {
+						this.ballFlight = {
+							fromX: holder.x,
+							fromY: holder.y,
+							toX: cmd.toX,
+							toY: cmd.toY,
+							receiverId: cmd.receiverId,
+							startTimeMs: nowMs,
+							durationMs: cmd.durationMs,
+							easing: cmd.easing,
+						};
+						this.ballHolderId = null;
+						// Receiver is no longer pinned — ReceiveAction runs them onto
+						// the Pass Target so arrival is a contested race.
+					} else if (cmd.type === "dribble") {
+						holder.targetX = cmd.toX;
+						holder.targetY = cmd.toY;
+						// Record the Carry Gear target; Stage 5 slews
+						// currentSpeedMultiplier toward it rather than snapping.
+						holder.speedMultiplier = cmd.speedMultiplier;
+						dribblerId = holder.id;
 					}
 				}
 			}
@@ -279,7 +321,24 @@ export class MatchSimulator {
 			const dx = p.targetX - p.x;
 			const dy = p.targetY - p.y;
 			const dist = Math.hypot(dx, dy);
-			const speed = MOVE_SPEED * p.speedMultiplier;
+
+			// Speed Slew (carrier only): ease currentSpeedMultiplier toward the
+			// Carry Gear target by at most SLEW_RATE per tick, so a Drive winds up
+			// over several ticks. Off-ball players snap — they read speedMultiplier
+			// directly, and their currentSpeedMultiplier tracks it so a future carry
+			// starts from their actual speed rather than a stale slew value.
+			let effectiveMultiplier: number;
+			if (p.id === dribblerId) {
+				const delta = p.speedMultiplier - p.currentSpeedMultiplier;
+				p.currentSpeedMultiplier +=
+					Math.max(-SLEW_RATE, Math.min(SLEW_RATE, delta));
+				effectiveMultiplier = p.currentSpeedMultiplier * p.maxSpeed;
+			} else {
+				p.currentSpeedMultiplier = p.speedMultiplier;
+				effectiveMultiplier = p.speedMultiplier;
+			}
+
+			const speed = MOVE_SPEED * effectiveMultiplier;
 			if (dist > speed) {
 				p.x += (dx / dist) * speed;
 				p.y += (dy / dist) * speed;
@@ -399,7 +458,9 @@ export class MatchSimulator {
 					baseY: _by,
 					targetX: _tx,
 					targetY: _ty,
+					maxSpeed: _ms,
 					speedMultiplier: _sm,
+					currentSpeedMultiplier: _csm,
 					phaseX: _px,
 					phaseY: _py,
 					freqX: _fx,

@@ -10,4 +10,6 @@ export const RB: ZoneConfig = {
 	yMaxDeep: 0.35,
 	yMaxHigh: 0.72,
 	idealBallOffset: 0.05,
+	driveTendency: 0.3,
+	carryTendency: 0.8,
 };

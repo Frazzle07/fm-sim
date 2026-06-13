@@ -9,4 +9,6 @@ export const CDM: ZoneConfig = {
 	yMaxDeep: 0.38,
 	yMaxHigh: 0.60,
 	idealBallOffset: -0.1,
+	driveTendency: 0.4,
+	carryTendency: 0.7,
 };

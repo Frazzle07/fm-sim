@@ -8,4 +8,6 @@ export const LW: ZoneConfig = {
 	yMaxDeep: 0.35,
 	yMaxHigh: 0.75,
 	idealBallOffset: 0.08,
+	driveTendency: 0.9,
+	carryTendency: 1.0,
 };

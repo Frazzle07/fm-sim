@@ -10,4 +10,6 @@ export const RCM: ZoneConfig = {
 	yMaxDeep: 0.55,
 	yMaxHigh: 0.85,
 	idealBallOffset: 0.05,
+	driveTendency: 0.4,
+	carryTendency: 0.9,
 };

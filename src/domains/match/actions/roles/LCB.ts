@@ -10,4 +10,6 @@ export const LCB: ZoneConfig = {
 	yMaxDeep: 0.3,
 	yMaxHigh: 0.52,
 	idealBallOffset: -0.25,
+	driveTendency: 0.1,
+	carryTendency: 0.4,
 };

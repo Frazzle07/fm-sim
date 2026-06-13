@@ -9,4 +9,6 @@ export const SS: ZoneConfig = {
 	yMaxDeep: 0.6,
 	yMaxHigh: 0.95,
 	idealBallOffset: 0.12,
+	driveTendency: 0.7,
+	carryTendency: 1.0,
 };

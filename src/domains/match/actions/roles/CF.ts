@@ -9,4 +9,6 @@ export const CF: ZoneConfig = {
 	yMaxDeep: 0.58,
 	yMaxHigh: 1.0,
 	idealBallOffset: 0.2,
+	driveTendency: 0.7,
+	carryTendency: 1.0,
 };

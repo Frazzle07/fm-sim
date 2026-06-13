@@ -9,4 +9,6 @@ export const CAM: ZoneConfig = {
 	yMaxDeep: 0.6,
 	yMaxHigh: 0.82,
 	idealBallOffset: 0.1,
+	driveTendency: 0.7,
+	carryTendency: 1.0,
 };

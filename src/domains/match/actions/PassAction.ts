@@ -1,6 +1,8 @@
 import { distToSegment, nearest } from "../queries";
+import { baselineValue, clampSurvival, stateValue } from "./arbiter";
 import type {
 	ActionContext,
+	ActionProposal,
 	BallAction,
 	BallCommand,
 	MatchPlayer,
@@ -168,6 +170,28 @@ function flightEasing(dx: number, dy: number): number {
 	return 2 + dist * 6;
 }
 
+// ─── Survival Probability (pass estimator) ───────────────────────────────────
+// P = probability the team still has the ball after the pass resolves, derived
+// from the same laneSafety + openness terms the receiver scoring already
+// computes. Calibrated to the shared meaning in CONTEXT.md (Survival
+// Probability): a clear lane + open receiver ≈ 0.9, tight marking ≈ 0.3.
+const PASS_SURVIVAL_FLOOR = 0.15;
+const PASS_SURVIVAL_SPAN = 0.8;
+// Openness (distance from receiver to nearest opponent) at which the receiver is
+// considered fully free for survival purposes.
+const OPENNESS_FREE = 0.12;
+// Relative weights of lane clearness vs receiver openness in the survival blend.
+const LANE_SURVIVAL_WEIGHT = 0.6;
+const OPENNESS_SURVIVAL_WEIGHT = 0.4;
+
+// Map a receiver's lane safety (0–1) and openness (pitch units) to retention P.
+function passSurvival(laneSafety: number, openness: number): number {
+	const opennessTerm = Math.min(openness / OPENNESS_FREE, 1);
+	const safety =
+		LANE_SURVIVAL_WEIGHT * laneSafety + OPENNESS_SURVIVAL_WEIGHT * opennessTerm;
+	return clampSurvival(PASS_SURVIVAL_FLOOR + PASS_SURVIVAL_SPAN * safety);
+}
+
 export const PassAction: BallAction = {
 	canExecute(ctx: ActionContext): boolean {
 		if (ctx.phase !== "open_play") return false;
@@ -186,7 +210,7 @@ export const PassAction: BallAction = {
 		);
 	},
 
-	execute(ctx: ActionContext): BallCommand {
+	propose(ctx: ActionContext): ActionProposal {
 		const teammates = ctx.allPlayers.filter(
 			(p) => p.isHome === ctx.player.isHome && p.id !== ctx.player.id,
 		);
@@ -231,32 +255,18 @@ export const PassAction: BallAction = {
 				score,
 				distToT,
 				openness,
+				laneSafety,
 				proximity,
 				positionBonus,
 				blockers,
 			};
 		});
 
+		// Best receiver still chosen by the existing scoring — that selection is the
+		// pass geometry, unchanged. The score now feeds the proposal as an *input*
+		// (via laneSafety + openness → Survival Probability), not as the output.
 		const ranked = scored.sort((a, b) => b.score - a.score);
 		const best = ranked[0];
-
-		const reasons: string[] = [];
-		if (best.proximity >= ranked[1]?.proximity) reasons.push("closest option");
-		if (best.openness >= ranked[1]?.openness)
-			reasons.push("most space around them");
-		if (best.positionBonus > 0)
-			reasons.push(`advanced position (${best.t.position})`);
-
-		// console.debug(
-		// 	`[Pass] ${ctx.player.name} passes to ${best.t.name} (score=${best.score.toFixed(2)}, blockers=${best.blockers}) — ${reasons.join(", ") || "best overall score"}. ` +
-		// 		`Others considered: ${ranked
-		// 			.slice(1)
-		// 			.map(
-		// 				(s) =>
-		// 					`${s.t.name} (${s.t.position}, score=${s.score.toFixed(2)}, blockers=${s.blockers})`,
-		// 			)
-		// 			.join(", ")}.`,
-		// );
 
 		// Aim at a point in space (receiver + Lead Offset), not the receiver's feet.
 		const target = leadTarget(best.t, opponents);
@@ -264,7 +274,7 @@ export const PassAction: BallAction = {
 		const dx = target.x - ctx.player.x;
 		const dy = target.y - ctx.player.y;
 
-		return {
+		const command: BallCommand = {
 			type: "pass",
 			toX: target.x,
 			toY: target.y,
@@ -272,5 +282,13 @@ export const PassAction: BallAction = {
 			durationMs: flightDurationMs(dx, dy),
 			easing: flightEasing(dx, dy),
 		};
+
+		// Expected Gain: the resulting state is the Pass Target held by the receiver,
+		// discounted by the chance the pass reaches a friendly receiver. Marginal
+		// against the arbiter's "now" baseline, so a non-progressive pass scores ~0.
+		const survival = passSurvival(best.laneSafety, best.openness);
+		const after = stateValue(target, best.t, survival);
+		const baseline = ctx.baseline ?? baselineValue(ctx);
+		return { gain: after - baseline, command };
 	},
 };
