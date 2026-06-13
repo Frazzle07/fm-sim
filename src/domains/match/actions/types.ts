@@ -25,6 +25,22 @@ export interface MatchPlayer {
 	baseY: number;
 	x: number;
 	y: number;
+	// The movement target this player is currently steering toward. Set by the
+	// previous tick's Stage 4; one tick stale when read during Stage 3 (pass
+	// command). Used by PassAction's Lead Offset to read the receiver's run.
+	targetX: number;
+	targetY: number;
+}
+
+// Read-only view of an in-flight pass, exposed to actions via ActionContext.
+export interface BallFlightInfo {
+	// Passer origin — the start of the flight line.
+	readonly fromX: number;
+	readonly fromY: number;
+	// Pass Target — the landing point the ball is travelling to.
+	readonly toX: number;
+	readonly toY: number;
+	readonly receiverId: string;
 }
 
 export interface ActionContext {
@@ -35,6 +51,10 @@ export interface ActionContext {
 	readonly ballVelocity: XY;
 	readonly ballHolderId: string | null;
 	readonly ballReceiverId: string | null;
+	// The in-flight pass, if any. Carries the Pass Target (to) and passer origin
+	// (from) so ReceiveAction can run onto the landing point or come short up the
+	// flight line. Null when no ball is in flight.
+	readonly ballFlight: BallFlightInfo | null;
 	readonly phase: MatchPhase;
 	readonly tick: number;
 	// Per-player state bag owned by StatefulActions. Actions read their own slice

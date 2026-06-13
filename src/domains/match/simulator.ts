@@ -3,8 +3,10 @@ import { DefensivePositionAction } from "./actions/DefensivePositionAction";
 import { DribbleAction } from "./actions/DribbleAction";
 import { FullbackAttackingAction } from "./actions/FullbackAttackingAction";
 import { HoldAction } from "./actions/HoldAction";
+import { LooseBallAction } from "./actions/LooseBallAction";
 import { PassAction } from "./actions/PassAction";
 import { PressAction } from "./actions/PressAction";
+import { ReceiveAction } from "./actions/ReceiveAction";
 import { TackleAction } from "./actions/TackleAction";
 import type {
 	Action,
@@ -46,6 +48,9 @@ const TACKLE_SUCCESS_RATE = 0.4;
 
 const INTERCEPTION_RADIUS = 0.04;
 const INTERCEPTION_BASE_CHANCE = 0.7;
+// Proximity at which a player collects a resting Loose Ball (reuses the
+// interception radius — one "nearest player collects" rule).
+const LOOSE_BALL_COLLECT_RADIUS = INTERCEPTION_RADIUS;
 
 // Evaluated in order; first action whose canExecute returns true wins.
 // PressAction leads: when the opposition has the ball, closing it down takes
@@ -53,6 +58,11 @@ const INTERCEPTION_BASE_CHANCE = 0.7;
 // so it never overrides attacking actions). This also lets a fullback who is the
 // nearest defender step out to press instead of running its attacking phases.
 const MOVEMENT_ACTIONS: Action[] = [
+	// ReceiveAction leads: while a ball is inbound, the named receiver runs onto
+	// the Pass Target. LooseBallAction follows: once the ball goes loose, the
+	// closest player on each team chases it (superseding the receiver's privilege).
+	ReceiveAction,
+	LooseBallAction,
 	PressAction,
 	FullbackAttackingAction,
 	AttackingPositionAction,
@@ -153,6 +163,15 @@ export class MatchSimulator {
 			},
 			ballHolderId: this.ballHolderId,
 			ballReceiverId: this.ballFlight?.receiverId ?? null,
+			ballFlight: this.ballFlight
+				? {
+						fromX: this.ballFlight.fromX,
+						fromY: this.ballFlight.fromY,
+						toX: this.ballFlight.toX,
+						toY: this.ballFlight.toY,
+						receiverId: this.ballFlight.receiverId,
+					}
+				: null,
 			phase: this.phase,
 			tick: this.tick,
 			playerState: stateKey ? (player.actionState[stateKey] ?? {}) : {},
@@ -190,12 +209,8 @@ export class MatchSimulator {
 								easing: cmd.easing,
 							};
 							this.ballHolderId = null;
-							// Pin the receiver in place so they wait for the ball.
-							const recv = this.players.find((p) => p.id === cmd.receiverId);
-							if (recv) {
-								recv.targetX = recv.x;
-								recv.targetY = recv.y;
-							}
+							// Receiver is no longer pinned — ReceiveAction runs them onto
+							// the Pass Target so arrival is a contested race.
 						} else if (cmd.type === "dribble") {
 							holder.targetX = cmd.toX;
 							holder.targetY = cmd.toY;
@@ -207,12 +222,11 @@ export class MatchSimulator {
 			}
 		}
 
-		// Stage 4: Compute movement targets (skip the dribbler — target already set;
-		// skip the receiver — they hold position until the ball arrives).
-		const receiverId = this.ballFlight?.receiverId ?? null;
+		// Stage 4: Compute movement targets (skip the dribbler — target already
+		// set). The receiver is no longer skipped: ReceiveAction runs them onto
+		// the Pass Target.
 		for (const p of this.players) {
 			if (p.id === dribblerId) continue;
-			if (p.id === receiverId) continue;
 			const ctx = this.buildContext(p);
 
 			if (TackleAction.canExecute(ctx)) {
@@ -341,10 +355,36 @@ export class MatchSimulator {
 				}
 			}
 
+			// On flight completion the ball does NOT auto-transfer to the named
+			// receiver — it rests at the Pass Target as a Loose Ball with no
+			// holder. Possession transfers on proximity below, so arrival is a
+			// genuine contest (the receiver, now unpinned, is running onto it).
 			if (this.ballFlight !== null && t >= 1) {
-				this.ballHolderId = receiverId;
-				this.possessionTick.set(receiverId, this.tick);
+				this.ball = { x: toX, y: toY };
 				this.ballFlight = null;
+			}
+		}
+
+		// Loose-ball collection: with no holder and no flight, the first player
+		// within the collection radius claims possession — nearest wins. One rule
+		// covering led balls, overhit balls, and deflections; both teams pursue
+		// the ball via LooseBallAction, so the receiver holds no special status.
+		if (this.ballHolderId === null && this.ballFlight === null) {
+			let collector: LivePlayer | null = null;
+			let collectorDist = LOOSE_BALL_COLLECT_RADIUS;
+			for (const p of this.players) {
+				const lastGained = this.possessionTick.get(p.id) ?? -Infinity;
+				if (this.tick - lastGained < INTERCEPTION_COOLDOWN_TICKS) continue;
+				const d = Math.hypot(p.x - this.ball.x, p.y - this.ball.y);
+				if (d < collectorDist) {
+					collector = p;
+					collectorDist = d;
+				}
+			}
+			if (collector) {
+				this.ballHolderId = collector.id;
+				this.possessionTick.set(collector.id, this.tick);
+				this.ball = { x: collector.x, y: collector.y };
 			}
 		}
 
@@ -357,6 +397,8 @@ export class MatchSimulator {
 				({
 					baseX: _bx,
 					baseY: _by,
+					targetX: _tx,
+					targetY: _ty,
 					speedMultiplier: _sm,
 					phaseX: _px,
 					phaseY: _py,
