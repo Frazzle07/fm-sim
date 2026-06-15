@@ -11,5 +11,8 @@ export const RCB: ZoneConfig = {
 	yMaxHigh: 0.52,
 	idealBallOffset: -0.25,
 	driveTendency: 0.1,
-	carryTendency: 0.4,
+	// Pass-first out of defence: a low carry tendency makes any half-decent pass
+	// outscore a carry in the arbiter, so the CB only dribbles into obvious open
+	// space ahead rather than carrying the ball up the pitch.
+	carryTendency: 0.2,
 };

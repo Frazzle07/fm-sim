@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DebugPassRouteImport } from './routes/debug.pass'
 import { Route as DebugMatchRouteImport } from './routes/debug.match'
 import { Route as DebugDribbleRouteImport } from './routes/debug.dribble'
 import { Route as AppTransfersRouteImport } from './routes/_app.transfers'
@@ -39,6 +40,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DebugPassRoute = DebugPassRouteImport.update({
+  id: '/debug/pass',
+  path: '/debug/pass',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DebugMatchRoute = DebugMatchRouteImport.update({
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/transfers': typeof AppTransfersRouteWithChildren
   '/debug/dribble': typeof DebugDribbleRoute
   '/debug/match': typeof DebugMatchRoute
+  '/debug/pass': typeof DebugPassRoute
   '/match/result': typeof AppMatchResultRoute
   '/match/team-selection': typeof AppMatchTeamSelectionRoute
   '/player/$playerId': typeof AppPlayerPlayerIdRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/table': typeof AppTableRoute
   '/debug/dribble': typeof DebugDribbleRoute
   '/debug/match': typeof DebugMatchRoute
+  '/debug/pass': typeof DebugPassRoute
   '/match/result': typeof AppMatchResultRoute
   '/match/team-selection': typeof AppMatchTeamSelectionRoute
   '/player/$playerId': typeof AppPlayerPlayerIdRoute
@@ -162,6 +170,7 @@ export interface FileRoutesById {
   '/_app/transfers': typeof AppTransfersRouteWithChildren
   '/debug/dribble': typeof DebugDribbleRoute
   '/debug/match': typeof DebugMatchRoute
+  '/debug/pass': typeof DebugPassRoute
   '/_app/match/result': typeof AppMatchResultRoute
   '/_app/match/team-selection': typeof AppMatchTeamSelectionRoute
   '/_app/player/$playerId': typeof AppPlayerPlayerIdRoute
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
     | '/transfers'
     | '/debug/dribble'
     | '/debug/match'
+    | '/debug/pass'
     | '/match/result'
     | '/match/team-selection'
     | '/player/$playerId'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/table'
     | '/debug/dribble'
     | '/debug/match'
+    | '/debug/pass'
     | '/match/result'
     | '/match/team-selection'
     | '/player/$playerId'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/_app/transfers'
     | '/debug/dribble'
     | '/debug/match'
+    | '/debug/pass'
     | '/_app/match/result'
     | '/_app/match/team-selection'
     | '/_app/player/$playerId'
@@ -231,6 +243,7 @@ export interface RootRouteChildren {
   SetupRoute: typeof SetupRoute
   DebugDribbleRoute: typeof DebugDribbleRoute
   DebugMatchRoute: typeof DebugMatchRoute
+  DebugPassRoute: typeof DebugPassRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -254,6 +267,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/debug/pass': {
+      id: '/debug/pass'
+      path: '/debug/pass'
+      fullPath: '/debug/pass'
+      preLoaderRoute: typeof DebugPassRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/debug/match': {
@@ -405,6 +425,7 @@ const rootRouteChildren: RootRouteChildren = {
   SetupRoute: SetupRoute,
   DebugDribbleRoute: DebugDribbleRoute,
   DebugMatchRoute: DebugMatchRoute,
+  DebugPassRoute: DebugPassRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

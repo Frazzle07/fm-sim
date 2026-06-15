@@ -24,11 +24,12 @@ function ctx(
 	receiver: MatchPlayer,
 	flight: BallFlightInfo | null,
 	others: MatchPlayer[] = [],
+	ball: { x: number; y: number } = { x: 0, y: 0 },
 ): ActionContext {
 	return {
 		player: receiver,
 		allPlayers: [receiver, ...others],
-		ball: { x: 0, y: 0 },
+		ball,
 		ballVelocity: { x: 0, y: 0 },
 		ballHolderId: null,
 		ballReceiverId: flight?.receiverId ?? null,

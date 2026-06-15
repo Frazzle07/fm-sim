@@ -43,9 +43,14 @@ export interface BallFlightInfo {
 	// Passer origin — the start of the flight line.
 	readonly fromX: number;
 	readonly fromY: number;
-	// Pass Target — the landing point the ball is travelling to.
+	// Overshoot Point — where the ball is aimed and would ease to rest if no one
+	// controlled it. Past the receiver, so the ball arrives with pace.
 	readonly toX: number;
 	readonly toY: number;
+	// Control Point — the Pass Target proper (receiver + Lead Offset), where the
+	// receiver runs to trap the still-moving ball mid-flight. Sits before toX.
+	readonly controlX: number;
+	readonly controlY: number;
 	readonly receiverId: string;
 }
 
@@ -57,9 +62,9 @@ export interface ActionContext {
 	readonly ballVelocity: XY;
 	readonly ballHolderId: string | null;
 	readonly ballReceiverId: string | null;
-	// The in-flight pass, if any. Carries the Pass Target (to) and passer origin
-	// (from) so ReceiveAction can run onto the landing point or come short up the
-	// flight line. Null when no ball is in flight.
+	// The in-flight pass, if any. Carries the Overshoot Point (to), the Control
+	// Point (where the receiver runs), and the passer origin (from) so ReceiveAction
+	// can run onto the Control Point. Null when no ball is in flight.
 	readonly ballFlight: BallFlightInfo | null;
 	readonly phase: MatchPhase;
 	readonly tick: number;
@@ -97,8 +102,15 @@ export type BallCommandType = "pass" | "dribble";
 
 export interface PassCommand {
 	type: "pass";
+	// Overshoot Point — where the ball is aimed. The flight eases to rest here if
+	// uncontrolled; the receiver traps it earlier, at the Control Point.
 	toX: number;
 	toY: number;
+	// Control Point — receiver + Lead Offset, where the receiver runs to control
+	// the still-moving ball. Duration/easing are computed against the overshoot
+	// distance (passer→to), so the original deceleration curve is preserved.
+	controlX: number;
+	controlY: number;
 	receiverId: string;
 	durationMs: number;
 	easing: number;

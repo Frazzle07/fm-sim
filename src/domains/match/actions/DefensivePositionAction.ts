@@ -29,9 +29,10 @@ export const DefensivePositionAction: Action = {
 			return { x: player.baseX, y: player.baseY };
 		}
 
-		// opponentInPossession=true: zone drops goal-side of the ball as the
-		// opponent advances, so the player tracks back instead of holding a high line.
-		const zone = activeZone(player, ctx.ball, config, true);
+		// The zone tracks the ball up the pitch in both phases (so the team presses
+		// high when the opponent builds deep); COVER_DEPTH then shifts this player a
+		// touch goal-side of the zone centre so they sit just behind the ball line.
+		const zone = activeZone(player, ctx.ball, config);
 		const centerX = (zone.xMin + zone.xMax) / 2;
 		const centerY = (zone.yMin + zone.yMax) / 2;
 		const goalSideOffset = player.isHome ? -COVER_DEPTH : COVER_DEPTH;

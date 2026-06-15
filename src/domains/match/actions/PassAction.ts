@@ -151,6 +151,40 @@ const POSITION_BONUS: Record<MatchPlayer["position"], number> = {
 	GK: -2,
 };
 
+// ─── Overshoot ───────────────────────────────────────────────────────────────
+// The ball is aimed PAST the Control Point at an Overshoot Point, so it arrives
+// with pace and the receiver controls it mid-flight rather than waiting for it to
+// stop dead at their feet. The overshoot distance scales with pass length — a
+// longer pass naturally carries further past the receiver — between a floor and a
+// cap. Duration/easing are computed against the overshoot distance so the
+// original deceleration curve is preserved; the receiver, sitting before the X,
+// meets the ball while it is still moving.
+const OVERSHOOT_FRACTION = 0.1;
+const OVERSHOOT_MIN = 0.03;
+const OVERSHOOT_MAX = 0.09;
+
+// Extend the passer→control vector past the Control Point by an overshoot scaled
+// to the pass distance, clamped to the pitch.
+function overshootTarget(
+	fromX: number,
+	fromY: number,
+	control: { x: number; y: number },
+): { x: number; y: number } {
+	const dx = control.x - fromX;
+	const dy = control.y - fromY;
+	const d = Math.hypot(dx, dy) || 1;
+	const overshoot = Math.max(
+		OVERSHOOT_MIN,
+		Math.min(d * OVERSHOOT_FRACTION, OVERSHOOT_MAX),
+	);
+	const ux = dx / d;
+	const uy = dy / d;
+	return {
+		x: Math.max(0, Math.min(1, control.x + ux * overshoot)),
+		y: Math.max(0, Math.min(1, control.y + uy * overshoot)),
+	};
+}
+
 // Speed factor: 1.0 = crisp pass, >1 = slower/heavier.
 // Averages two uniforms (triangular, range [0,1], mean 0.5) then shifts so
 // the range is [0.8, 1.8] with mean ~1.3 — passes are on average 30% slower
@@ -268,9 +302,15 @@ export const PassAction: BallAction = {
 		const ranked = scored.sort((a, b) => b.score - a.score);
 		const best = ranked[0];
 
-		// Aim at a point in space (receiver + Lead Offset), not the receiver's feet.
-		const target = leadTarget(best.t, opponents);
+		// Control Point: receiver + Lead Offset — where the receiver runs to trap
+		// the ball. The ball itself is aimed PAST this, at the Overshoot Point, so it
+		// arrives with pace and is controlled mid-flight.
+		const control = leadTarget(best.t, opponents);
+		const target = overshootTarget(ctx.player.x, ctx.player.y, control);
 
+		// Duration/easing are computed against the OVERSHOOT distance (passer→X), so
+		// the original deceleration curve is preserved — the receiver, sitting at the
+		// Control Point before the X, meets the ball while it is still moving.
 		const dx = target.x - ctx.player.x;
 		const dy = target.y - ctx.player.y;
 
@@ -278,16 +318,20 @@ export const PassAction: BallAction = {
 			type: "pass",
 			toX: target.x,
 			toY: target.y,
+			controlX: control.x,
+			controlY: control.y,
 			receiverId: best.t.id,
 			durationMs: flightDurationMs(dx, dy),
 			easing: flightEasing(dx, dy),
 		};
 
-		// Expected Gain: the resulting state is the Pass Target held by the receiver,
-		// discounted by the chance the pass reaches a friendly receiver. Marginal
-		// against the arbiter's "now" baseline, so a non-progressive pass scores ~0.
+		// Expected Gain: the resulting state is the Control Point held by the
+		// receiver, discounted by the chance the pass reaches a friendly receiver.
+		// Scored at the Control Point (where the receiver actually gains the ball),
+		// not the Overshoot Point. Marginal against the arbiter's "now" baseline, so
+		// a non-progressive pass scores ~0.
 		const survival = passSurvival(best.laneSafety, best.openness);
-		const after = stateValue(target, best.t, survival);
+		const after = stateValue(control, best.t, survival);
 		const baseline = ctx.baseline ?? baselineValue(ctx);
 		return { gain: after - baseline, command };
 	},

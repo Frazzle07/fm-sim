@@ -284,8 +284,9 @@ export default function MatchResultPage({ fixtureId }: MatchResultPageProps) {
 				</div>
 			</div>
 
-			{/* Live pitch */}
-			<Card className="mb-3">
+			{/* Live pitch — break out of the page's max-w-5xl cap so the pitch
+			    can scale up to the full viewport (bounded by height in MatchPitch). */}
+			<Card className="mb-3 w-screen max-w-[1600px] relative left-1/2 -translate-x-1/2">
 				<CardContent className="pt-4">
 					<MatchPitch
 						homePlayers={hT.players}

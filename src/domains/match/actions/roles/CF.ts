@@ -1,9 +1,11 @@
 import type { ZoneConfig } from "./types";
 
-// CF stays central and pushes highest — stretching the defensive line.
+// CF holds the right-of-centre channel and pushes highest — stretching the
+// defensive line. Its x-zone is kept distinct from the SS so the front two
+// occupy different horizontal channels rather than stacking centrally.
 export const CF: ZoneConfig = {
-	xMin: 0.25,
-	xMax: 0.75,
+	xMin: 0.45,
+	xMax: 0.78,
 	yMinDeep: 0.42,
 	yMinHigh: 0.55,
 	yMaxDeep: 0.58,

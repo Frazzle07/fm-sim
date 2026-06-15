@@ -1,6 +1,7 @@
 import { attackingDepth } from "../queries";
 import { baselineValue, clampSurvival, stateValue } from "./arbiter";
 import { ROLE_ZONE_CONFIG } from "./roles";
+import type { ZoneConfig } from "./roles/types";
 import type {
 	ActionContext,
 	ActionProposal,
@@ -22,6 +23,18 @@ const CARRY_PROBE_DISTANCE = 0.08;
 // escape valve — chosen only when forward and sideways are badly blocked and
 // backward is far safer. Sideways candidates (forwardProgress ≈ 0) are untouched.
 const BACKWARD_PENALTY = 0.3;
+
+// Lateral zone discipline: a carry candidate whose x strays outside the role's
+// horizontal Tactical Zone ([xMin, xMax]) is discounted, ramping from 1 at the
+// band edge down to ZONE_STRAY_FLOOR once it is ZONE_STRAY_FULL beyond the edge.
+// Without this the carrier is scored on openness alone, and the touchline is
+// always the most open lane — so a centre-back with forward blocked drifts
+// sideways into the empty channel and ends up out on the wing. Full-backs carry
+// the flank freely because their band already extends to the touchline; only a
+// role carrying *out of position* is penalised. Roles with no zone config (the
+// GK) are not constrained here.
+const ZONE_STRAY_FLOOR = 0.25;
+const ZONE_STRAY_FULL = 0.15;
 
 // Carry Gear pressure radii (nearest-defender distance to the carrier).
 // Beyond CARRY_THREAT_RADIUS: no pressure → Walk.
@@ -78,6 +91,19 @@ function nearestDefenderDist(
 	return min;
 }
 
+// Lateral zone-discipline multiplier in [ZONE_STRAY_FLOOR, 1] for a candidate at
+// horizontal position x. Inside the role's [xMin, xMax] band → 1 (no penalty).
+// Outside, it ramps down linearly with how far past the nearer edge the
+// candidate sits, bottoming out at ZONE_STRAY_FLOOR once ZONE_STRAY_FULL beyond.
+// No zone config (e.g. GK) → unconstrained.
+function zoneStrayFactor(x: number, zone: ZoneConfig | undefined): number {
+	if (!zone) return 1;
+	const stray = Math.max(zone.xMin - x, x - zone.xMax, 0);
+	if (stray <= 0) return 1;
+	const t = Math.min(stray / ZONE_STRAY_FULL, 1);
+	return 1 - (1 - ZONE_STRAY_FLOOR) * t;
+}
+
 const D = Math.SQRT1_2;
 const COMPASS_DIRS: readonly { dx: number; dy: number }[] = [
 	{ dx: 1, dy: 0 },
@@ -112,6 +138,7 @@ function bestCarryCandidate(ctx: ActionContext): {
 	const { player } = ctx;
 	const opponents = opponentsOf(ctx);
 	const dir = attackingDir(player);
+	const zone = ROLE_ZONE_CONFIG[player.role];
 
 	let best = {
 		x: player.x,
@@ -132,8 +159,15 @@ function bestCarryCandidate(ctx: ActionContext): {
 		// higher. A backward candidate is heavily penalised on top of the depth it
 		// already loses, so the carrier retreats only as a last resort.
 		const directionFactor = forwardProgress < 0 ? BACKWARD_PENALTY : 1;
+		// Lateral discipline: discount a candidate that carries the role outside its
+		// horizontal Tactical Zone, so an unmarked sideways channel (always open
+		// near the touchline) no longer lures a centre-back off his post.
+		const zoneFactor = zoneStrayFactor(cx, zone);
 		const score =
-			attackingDepth(cy, player.isHome) * carrySurvival(openness) * directionFactor;
+			attackingDepth(cy, player.isHome) *
+			carrySurvival(openness) *
+			directionFactor *
+			zoneFactor;
 		if (score > best.score) {
 			best = { x: cx, y: cy, openness, forwardProgress, score };
 		}

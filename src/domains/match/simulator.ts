@@ -64,6 +64,15 @@ const INTERCEPTION_BASE_CHANCE = 0.7;
 // interception radius — one "nearest player collects" rule).
 const LOOSE_BALL_COLLECT_RADIUS = INTERCEPTION_RADIUS;
 
+// Radius at which the named receiver controls a still-in-flight ball. Set to a
+// single move step so control fires only when the player is essentially
+// COINCIDENT with the ball — there is no gap left for the held-ball pin (Stage 6)
+// to snap across. A ball played into space stays loose, flying its real path,
+// until the chaser physically catches it; if the ball is moving faster than the
+// player can close (hit too hard into space), it overruns to the Overshoot Point
+// and becomes a genuine Loose Ball — correct football, not a snap.
+const CONTROL_RADIUS = MOVE_SPEED;
+
 // Evaluated in order; first action whose canExecute returns true wins.
 // PressAction leads: when the opposition has the ball, closing it down takes
 // precedence over positional/attacking movement (it only fires while defending,
@@ -113,8 +122,13 @@ interface LivePlayer extends MatchPlayer {
 interface BallFlight {
 	fromX: number;
 	fromY: number;
+	// Overshoot Point — where the ball is aimed; it eases to rest here if no one
+	// controls it. Past the Control Point, so the ball arrives with pace.
 	toX: number;
 	toY: number;
+	// Control Point — where the receiver runs to trap the still-moving ball.
+	controlX: number;
+	controlY: number;
 	receiverId: string;
 	startTimeMs: number;
 	durationMs: number;
@@ -132,6 +146,10 @@ export class MatchSimulator {
 	private prevBall: XY = { x: 0.5, y: 0.5 };
 	private ballHolderId: string | null = null;
 	private ballFlight: BallFlight | null = null;
+	// Retained after flight ends untouched (the ball overran to the Overshoot
+	// Point) so LooseBallAction's pursuit knows who the pass was aimed at until a
+	// player collects it. Cleared on collection.
+	private looseBallReceiverId: string | null = null;
 	// Maps player id → tick at which they last gained possession (intercept or receive).
 	private possessionTick: Map<string, number> = new Map();
 
@@ -187,13 +205,15 @@ export class MatchSimulator {
 				y: this.ball.y - this.prevBall.y,
 			},
 			ballHolderId: this.ballHolderId,
-			ballReceiverId: this.ballFlight?.receiverId ?? null,
+			ballReceiverId: this.ballFlight?.receiverId ?? this.looseBallReceiverId,
 			ballFlight: this.ballFlight
 				? {
 						fromX: this.ballFlight.fromX,
 						fromY: this.ballFlight.fromY,
 						toX: this.ballFlight.toX,
 						toY: this.ballFlight.toY,
+						controlX: this.ballFlight.controlX,
+						controlY: this.ballFlight.controlY,
 						receiverId: this.ballFlight.receiverId,
 					}
 				: null,
@@ -244,6 +264,8 @@ export class MatchSimulator {
 							fromY: holder.y,
 							toX: cmd.toX,
 							toY: cmd.toY,
+							controlX: cmd.controlX,
+							controlY: cmd.controlY,
 							receiverId: cmd.receiverId,
 							startTimeMs: nowMs,
 							durationMs: cmd.durationMs,
@@ -383,6 +405,9 @@ export class MatchSimulator {
 			} = this.ballFlight;
 			const t = Math.min((nowMs - startTimeMs) / durationMs, 1);
 			const eased = 1 - (1 - t) ** easing;
+			// The ball eases toward the Overshoot Point (toX/toY) — past the receiver
+			// — so it stays fast as it crosses the Control Point. It only decelerates
+			// to a near-stop at the X, which the receiver almost never lets it reach.
 			this.ball = {
 				x: fromX + (toX - fromX) * eased,
 				y: fromY + (toY - fromY) * eased,
@@ -404,6 +429,7 @@ export class MatchSimulator {
 						if (Math.random() < chance) {
 							this.ballHolderId = opp.id;
 							this.ballFlight = null;
+							this.looseBallReceiverId = null;
 							this.possessionTick.set(opp.id, this.tick);
 							console.debug(
 								`[Intercept] ${opp.name} intercepted the pass near (${this.ball.x.toFixed(2)}, ${this.ball.y.toFixed(2)})`,
@@ -414,12 +440,39 @@ export class MatchSimulator {
 				}
 			}
 
-			// On flight completion the ball does NOT auto-transfer to the named
-			// receiver — it rests at the Pass Target as a Loose Ball with no
-			// holder. Possession transfers on proximity below, so arrival is a
-			// genuine contest (the receiver, now unpinned, is running onto it).
+			// Control: the receiver traps the ball only when they are genuinely on top
+			// of its LIVE position — never by the ball snapping to the player. The
+			// ball flies its real eased path toward the Overshoot Point the whole
+			// time; the receiver runs onto it (to the Control Point, then chasing the
+			// ball if it overruns — see ReceiveAction) and controls it on contact. On
+			// control the ball stays where it physically is, so a ball played into
+			// space stays loose until the receiver is right on it.
+			if (this.ballFlight !== null && receiver) {
+				const lastGained = this.possessionTick.get(receiver.id) ?? -Infinity;
+				const d = Math.hypot(
+					receiver.x - this.ball.x,
+					receiver.y - this.ball.y,
+				);
+				if (
+					this.tick - lastGained >= INTERCEPTION_COOLDOWN_TICKS &&
+					d < CONTROL_RADIUS
+				) {
+					this.ballHolderId = receiver.id;
+					this.ballFlight = null;
+					this.looseBallReceiverId = null;
+					this.possessionTick.set(receiver.id, this.tick);
+					// Ball ends where it physically is — the receiver is on top of it.
+					this.ball = { x: this.ball.x, y: this.ball.y };
+				}
+			}
+
+			// Safety fallback: the ball reached the Overshoot Point untouched (a
+			// genuinely overhit pass). It comes to rest at the X and goes loose;
+			// LooseBallAction sends both teams to chase it, and the collection block
+			// below claims it. No rolling phase — the easing already decelerated it.
 			if (this.ballFlight !== null && t >= 1) {
 				this.ball = { x: toX, y: toY };
+				this.looseBallReceiverId = receiverId;
 				this.ballFlight = null;
 			}
 		}
@@ -442,6 +495,7 @@ export class MatchSimulator {
 			}
 			if (collector) {
 				this.ballHolderId = collector.id;
+				this.looseBallReceiverId = null;
 				this.possessionTick.set(collector.id, this.tick);
 				this.ball = { x: collector.x, y: collector.y };
 			}

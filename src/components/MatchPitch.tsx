@@ -465,11 +465,18 @@ export default function MatchPitch({
 					borderRadius: 10,
 					overflow: "hidden",
 					border: "1px solid #145523",
+					// Fill the available width, but never let the pitch grow taller
+					// than the viewport. The pitch keeps its W:H aspect ratio, so
+					// whichever of width/height is the binding constraint wins.
+					width: "100%",
+					maxWidth: `calc((100vh - 140px) * ${W / H})`,
+					marginLeft: "auto",
+					marginRight: "auto",
 				}}
 			>
 				<svg
 					viewBox={`0 0 ${W} ${H}`}
-					style={{ display: "block", width: "100%" }}
+					style={{ display: "block", width: "100%", aspectRatio: `${W} / ${H}` }}
 					aria-label="Match pitch"
 				>
 					<PitchMarkings />

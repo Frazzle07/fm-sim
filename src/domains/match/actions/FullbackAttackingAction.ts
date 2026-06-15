@@ -205,7 +205,8 @@ function supportTarget(ctx: ActionContext): XY {
 	const ballDepth = ballAttackingDepth(ctx);
 	const targetDepth = ballDepth + SUPPORT_AHEAD_OF_BALL;
 	const rawY = ctx.player.isHome ? 1 - targetDepth : targetDepth;
-	const y = softClamp(rawY, zone.yMin, zone.yMax);
+	// Hard-clamp so the fullback never overruns its zone into the opponent box.
+	const y = Math.max(zone.yMin, Math.min(zone.yMax, rawY));
 	return { x: flankX, y };
 }
 
@@ -221,7 +222,9 @@ function overlapTarget(ctx: ActionContext, winger: MatchPlayer): XY {
 	);
 	const aheadOfWinger = wingerDepth + gapAheadOfWinger;
 	const rawY = ctx.player.isHome ? 1 - aheadOfWinger : aheadOfWinger;
-	const y = softClamp(rawY, zone.yMin, zone.yMax);
+	// Hard-clamp so an overlap chasing the (now higher) winger can't run the
+	// fullback past its zone ceiling and into the opponent box.
+	const y = Math.max(zone.yMin, Math.min(zone.yMax, rawY));
 	return { x: touchlineX, y };
 }
 
@@ -246,6 +249,10 @@ export const FullbackAttackingAction: StatefulAction = {
 		if (!isFullback(ctx.player.role)) return false;
 		if (ctx.ballHolderId === ctx.player.id) return false;
 		if ((ctx.ballReceiverId ?? null) === ctx.player.id) return false;
+		// Only drive attacking runs when we have (or are contesting) the ball.
+		// When the opposition is in possession, defer to DefensivePositionAction
+		// so the fullback retreats goal-side instead of holding a high line.
+		if (!teamIsInPossession(ctx) && !ballIsLoose(ctx)) return false;
 		return true;
 	},
 

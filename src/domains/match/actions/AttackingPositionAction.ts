@@ -35,24 +35,27 @@ function clamp(v: number, min: number, max: number): number {
 // Zone y-bounds scale linearly with the team's territorial depth so the player
 // tracks back when defending deep and pushes forward when attacking high.
 //
-// `depth` (0 = own goal, 1 = opponent goal) is *possession-aware*:
-//   - In possession: depth follows the ball up the pitch — push forward as we advance.
-//   - Out of possession: depth is the inverse of the opponent's advance, so the
-//     further they push toward our goal, the deeper this player drops. The retreat
-//     is continuous — the team's shape slides back smoothly as pressure mounts,
-//     rather than snapping forward (the old bug, which pushed defenders UPfield
-//     exactly when the opponent reached our box).
+// `depth` (0 = own goal, 1 = opponent goal) tracks the ball up and down the
+// pitch *in both phases*:
+//   - In possession: push forward as we advance.
+//   - Out of possession: the line follows the ball too — when the opponent builds
+//     deep in their own half the ball is far from our goal (high ballProgress), so
+//     the team pushes up to press high; as they advance toward our goal ballProgress
+//     falls and the line retreats. Goal-side cover is layered on separately by
+//     DefensivePositionAction's COVER_DEPTH, so the line sits just behind the ball
+//     rather than level with it.
+//
+// (The previous out-of-possession branch inverted this — `1 - ballProgress` — which
+// dropped the whole team onto its own goal exactly when the opponent was deepest and
+// least threatening, leaving them passive instead of pressing high.)
 export function activeZone(
 	player: { isHome: boolean },
 	ball: { x: number; y: number },
 	config: ZoneConfig,
-	opponentInPossession = false,
 ): { xMin: number; xMax: number; yMin: number; yMax: number } {
-	const ballProgress = ballDepth(ball.y, player.isHome);
-	// When the opponent carries the ball, our line should sit goal-side of it.
-	// ballProgress is high when the ball is near our goal, so invert it into a
-	// retreat depth that approaches 0 as the opponent advances.
-	const depth = opponentInPossession ? 1 - ballProgress : ballProgress;
+	// ballProgress: 0 = ball at our goal, 1 = ball at the opponent's goal. The line
+	// tracks it in both phases (goal-side cover is applied downstream when defending).
+	const depth = ballDepth(ball.y, player.isHome);
 	const yMinHome =
 		config.yMinDeep + (config.yMinHigh - config.yMinDeep) * depth;
 	const yMaxHome =
@@ -74,8 +77,10 @@ export function activeZone(
 	};
 }
 
+// Attacking progress of the ball, in the same y-space as the role zone configs:
+// 0 = own goal end, 1 = opponent goal end. Home attacks toward y=1, away toward y=0.
 function ballDepth(ballY: number, isHome: boolean): number {
-	return isHome ? 1 - ballY : ballY;
+	return isHome ? ballY : 1 - ballY;
 }
 
 // 0 = ball is far from this role's territory, 1 = ball is right in it.

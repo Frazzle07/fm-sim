@@ -73,7 +73,7 @@ export const PressAction: Action = {
 		// team keeps its shape rather than everyone collapsing onto the ball.
 		const zoneConfig = ROLE_ZONE_CONFIG[ctx.player.role];
 		if (!zoneConfig) return false;
-		const zone = activeZone(ctx.player, ctx.ball, zoneConfig, true);
+		const zone = activeZone(ctx.player, ctx.ball, zoneConfig);
 		return (
 			holder.x >= zone.xMin &&
 			holder.x <= zone.xMax &&
